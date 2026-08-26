@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/server"
+import { checkTiendaNubeConnection } from "@/services/tienda-nube"
 
 export async function GET() {
   const checks: Record<string, string> = {}
@@ -24,6 +25,16 @@ export async function GET() {
   }
 
   checks.anthropic = process.env.ANTHROPIC_API_KEY ? "configurada" : "falta ANTHROPIC_API_KEY"
+
+  if (!process.env.TIENDANUBE_ACCESS_TOKEN) {
+    checks.tiendanube = "falta TIENDANUBE_ACCESS_TOKEN (Fase 8 pendiente)"
+  } else {
+    try {
+      checks.tiendanube = await checkTiendaNubeConnection()
+    } catch (err) {
+      checks.tiendanube = `error: ${err instanceof Error ? err.message : String(err)}`
+    }
+  }
 
   return NextResponse.json({ ok: true, checks })
 }

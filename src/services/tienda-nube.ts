@@ -104,6 +104,13 @@ export async function fetchAllProductos(options?: { updatedAfter?: Date }): Prom
   return productos
 }
 
+// Chequeo liviano para /api/health — un solo producto, no toda la paginación.
+export async function checkTiendaNubeConnection(): Promise<string> {
+  const config = getConfig()
+  const data = (await tiendaNubeFetch("/products?per_page=1", config)) as TiendaNubeApiProduct[]
+  return `conectado — ejemplo: "${data[0]?.name?.es ?? "(sin productos)"}"`
+}
+
 export async function fetchProducto(tiendaNubeId: string): Promise<TiendaNubeProducto> {
   const config = getConfig()
   const data = (await tiendaNubeFetch(`/products/${tiendaNubeId}`, config)) as TiendaNubeApiProduct
