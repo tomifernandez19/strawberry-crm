@@ -1,5 +1,5 @@
 import AppShell from "../_components/app-shell"
 
-export default function BandejaLayout({ children }: { children: React.ReactNode }) {
+export default function CatalogoLayout({ children }: { children: React.ReactNode }) {
   return <AppShell>{children}</AppShell>
 }
