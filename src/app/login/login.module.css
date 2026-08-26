@@ -1,0 +1,67 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #faf8f6;
+  font-family: system-ui, sans-serif;
+}
+
+.card {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 32px;
+  background: #fff;
+  border: 1px solid #e2d5d3;
+  border-radius: 12px;
+}
+
+.card h1 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.subtitle {
+  margin: 0 0 8px;
+  color: #5e4f53;
+  font-size: 0.9rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: #5e4f53;
+}
+
+.field input {
+  padding: 8px 10px;
+  border: 1px solid #e2d5d3;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.card button {
+  margin-top: 8px;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  background: #8c2b4a;
+  color: #fff;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.card button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.error {
+  margin: 0;
+  color: #b23a3a;
+  font-size: 0.85rem;
+}
