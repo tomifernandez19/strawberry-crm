@@ -18,7 +18,7 @@ const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_
 const TEST_EMAIL = "test-bandeja@strawberrytrejo.local"
 const TEST_PASSWORD = "PruebaBandeja2026!"
 
-const { data: created, error: userError } = await db.auth.admin.createUser({
+const { error: userError } = await db.auth.admin.createUser({
   email: TEST_EMAIL,
   password: TEST_PASSWORD,
   email_confirm: true,
