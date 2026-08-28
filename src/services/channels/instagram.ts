@@ -1,12 +1,18 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
 import type { ChannelAdapter, InboundMessage, OutboundMessage } from "./types"
 
-// Instagram Messaging corre sobre la misma Messenger Platform que Facebook
-// Messenger (confirmado contra la documentación oficial, no asumido) — por
-// eso el shape del payload es genérico "page", no específico de Instagram.
-const GRAPH_API_VERSION = "v21.0"
+// "Instagram API con Instagram Login" (el flujo que terminó usando esta app,
+// no el viejo basado en Página de Facebook) — confirmado contra la
+// documentación oficial: endpoints en graph.instagram.com, token de usuario
+// de Instagram, sin Página intermedia.
+const GRAPH_API_VERSION = "v25.0"
 
-interface MessengerWebhookPayload {
+// La forma exacta del payload de webhook para este flujo no está del todo
+// clara en la documentación pública (hay indicios de un formato "messaging"
+// como Messenger, y de un formato "changes" como otros webhooks de
+// Instagram). Se soportan ambos acá; queda confirmarlo con el primer
+// mensaje real una vez conectado el webhook de verdad.
+interface InstagramWebhookPayload {
   object: string
   entry: Array<{
     id: string
@@ -17,7 +23,35 @@ interface MessengerWebhookPayload {
       timestamp: number
       message?: { mid: string; text?: string; attachments?: Array<{ type: string; payload: { url: string } }> }
     }>
+    changes?: Array<{
+      field: string
+      value: {
+        sender?: { id: string }
+        recipient?: { id: string }
+        timestamp?: number
+        message?: { mid: string; text?: string; attachments?: Array<{ type: string; payload: { url: string } }> }
+      }
+    }>
   }>
+}
+
+function parseMessagingEvent(evento: {
+  sender: { id: string }
+  message?: { mid: string; text?: string; attachments?: Array<{ type: string; payload: { url: string } }> }
+  timestamp: number
+}): InboundMessage | null {
+  if (!evento.message) return null
+  const attachment = evento.message.attachments?.[0]
+  return {
+    canal: "instagram",
+    canalThreadId: evento.sender.id,
+    canalMessageId: evento.message.mid,
+    clienteIdentidad: { psid: evento.sender.id },
+    tipoContenido: attachment ? (attachment.type === "image" ? "imagen" : "documento") : "texto",
+    contenido: evento.message.text,
+    mediaUrl: attachment?.payload.url,
+    timestamp: new Date(evento.timestamp).toISOString(),
+  }
 }
 
 export const instagramAdapter: ChannelAdapter = {
@@ -32,24 +66,23 @@ export const instagramAdapter: ChannelAdapter = {
   },
 
   parseWebhookPayload(payload: unknown): InboundMessage[] {
-    const data = payload as MessengerWebhookPayload
+    const data = payload as InstagramWebhookPayload
     const mensajes: InboundMessage[] = []
 
     for (const entry of data.entry ?? []) {
       for (const evento of entry.messaging ?? []) {
-        if (!evento.message) continue // ignora seen/delivery/postback, solo mensajes reales
+        const parsed = parseMessagingEvent(evento)
+        if (parsed) mensajes.push(parsed)
+      }
 
-        const attachment = evento.message.attachments?.[0]
-        mensajes.push({
-          canal: "instagram",
-          canalThreadId: evento.sender.id,
-          canalMessageId: evento.message.mid,
-          clienteIdentidad: { psid: evento.sender.id },
-          tipoContenido: attachment ? (attachment.type === "image" ? "imagen" : "documento") : "texto",
-          contenido: evento.message.text,
-          mediaUrl: attachment?.payload.url,
-          timestamp: new Date(evento.timestamp).toISOString(),
+      for (const cambio of entry.changes ?? []) {
+        if (cambio.field !== "messages" || !cambio.value.sender) continue
+        const parsed = parseMessagingEvent({
+          sender: cambio.value.sender,
+          message: cambio.value.message,
+          timestamp: cambio.value.timestamp ?? Date.now(),
         })
+        if (parsed) mensajes.push(parsed)
       }
     }
 
@@ -58,11 +91,13 @@ export const instagramAdapter: ChannelAdapter = {
 
   async sendMessage(message: OutboundMessage): Promise<void> {
     const token = process.env.INSTAGRAM_ACCESS_TOKEN
+    const igId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID
     if (!token) throw new Error("Falta INSTAGRAM_ACCESS_TOKEN")
+    if (!igId) throw new Error("Falta INSTAGRAM_BUSINESS_ACCOUNT_ID")
 
-    const response = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages?access_token=${token}`, {
+    const response = await fetch(`https://graph.instagram.com/${GRAPH_API_VERSION}/${igId}/messages`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         recipient: { id: message.canalThreadId },
         message: { text: message.contenido },
@@ -75,8 +110,10 @@ export const instagramAdapter: ChannelAdapter = {
   },
 }
 
-// Firma HMAC-SHA256 del body crudo, contra el App Secret — evita que
-// cualquiera pueda pegarle a este endpoint haciéndose pasar por Meta.
+// Firma HMAC-SHA256 del body crudo, contra el App Secret de Instagram (el
+// que aparece en Instagram > API setup with Instagram login — es distinto
+// del App Secret general de la app). Evita que cualquiera le pegue a este
+// endpoint haciéndose pasar por Meta.
 export function verifyInstagramSignature(rawBody: string, signatureHeader: string | null): boolean {
   const appSecret = process.env.INSTAGRAM_APP_SECRET
   if (!appSecret || !signatureHeader) return false

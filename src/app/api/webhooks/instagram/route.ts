@@ -27,6 +27,14 @@ export async function POST(request: Request) {
 
   const payload = JSON.parse(rawBody)
   const mensajes = instagramAdapter.parseWebhookPayload(payload)
+
+  if (mensajes.length === 0) {
+    // Todavía no confirmado 100% el shape exacto del payload contra un
+    // mensaje real (documentación pública ambigua) — esto deja rastro en
+    // los logs de Vercel para ajustar el parser si hace falta.
+    console.log("Webhook de Instagram sin mensajes parseados. Payload crudo:", rawBody)
+  }
+
   const db = createServiceClient()
 
   for (const msg of mensajes) {

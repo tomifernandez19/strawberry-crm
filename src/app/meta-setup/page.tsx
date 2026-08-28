@@ -42,10 +42,15 @@ export default function MetaSetupPage() {
 
   return (
     <div className={styles.page}>
-      <h1>Setup de Instagram / Messenger</h1>
+      <h1>Setup de Facebook Messenger</h1>
       <p className={styles.intro}>
-        Paso único. Pegá acá el App ID y el token corto que sacaste de Graph API Explorer — esta página los
-        cambia por un token de página de larga duración, sin guardar nada.
+        Esto es para el flujo clásico basado en Página de Facebook (Messenger). Instagram terminó usando un
+        flujo distinto y más simple — no hace falta esta página para eso, alcanza con el botón &ldquo;Generate
+        token&rdquo; dentro de Instagram &gt; API setup with Instagram business login.
+      </p>
+      <p className={styles.intro}>
+        Paso único para Messenger. Pegá acá el App ID y el token corto que sacaste de Graph API Explorer —
+        esta página los cambia por un token de página de larga duración, sin guardar nada.
       </p>
 
       <form className={styles.form} onSubmit={handleSubmit}>
