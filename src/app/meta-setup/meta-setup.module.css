@@ -1,0 +1,106 @@
+.page {
+  max-width: 640px;
+}
+
+.intro {
+  color: #5e4f53;
+  margin: 0 0 20px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid #e2d5d3;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: #5e4f53;
+}
+
+.form input {
+  padding: 8px 10px;
+  border: 1px solid #e2d5d3;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: ui-monospace, monospace;
+}
+
+.form button {
+  border: none;
+  background: #8c2b4a;
+  color: #fff;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.error {
+  color: #b23a3a;
+  background: #fbe7e5;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  margin-top: 14px;
+}
+
+.warning {
+  color: #a66a1e;
+  background: #fbf0df;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  margin-top: 14px;
+}
+
+.results {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e2d5d3;
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.card h2 {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+
+.card p {
+  margin: 6px 0;
+  font-size: 0.88rem;
+}
+
+.tokenBox {
+  display: block;
+  word-break: break-all;
+  background: #f1e9e8;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 0.78rem;
+  margin-top: 6px;
+}
+
+.hint {
+  color: #8b7a7e;
+  font-size: 0.78rem;
+}
