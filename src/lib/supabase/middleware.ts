@@ -3,11 +3,13 @@ import { NextResponse, type NextRequest } from "next/server"
 
 export async function updateSession(request: NextRequest) {
   // Los webhooks los llama Meta/Tienda Nube directo, sin cookie de sesión
-  // nuestra — no pasan por el chequeo de auth. /api/health tampoco (lo
-  // usa uptime monitoring / chequeos externos).
+  // nuestra — no pasan por el chequeo de auth. /api/health tampoco (lo usa
+  // uptime monitoring / chequeos externos). /privacidad tiene que ser
+  // pública para que Meta pueda validarla al publicar la app.
   if (
     request.nextUrl.pathname.startsWith("/api/webhooks") ||
-    request.nextUrl.pathname.startsWith("/api/health")
+    request.nextUrl.pathname.startsWith("/api/health") ||
+    request.nextUrl.pathname.startsWith("/privacidad")
   ) {
     return NextResponse.next({ request })
   }
