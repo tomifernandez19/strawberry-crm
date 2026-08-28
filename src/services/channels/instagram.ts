@@ -7,11 +7,19 @@ import type { ChannelAdapter, InboundMessage, OutboundMessage } from "./types"
 // de Instagram, sin Página intermedia.
 const GRAPH_API_VERSION = "v25.0"
 
-// La forma exacta del payload de webhook para este flujo no está del todo
-// clara en la documentación pública (hay indicios de un formato "messaging"
-// como Messenger, y de un formato "changes" como otros webhooks de
-// Instagram). Se soportan ambos acá; queda confirmarlo con el primer
-// mensaje real una vez conectado el webhook de verdad.
+// Formato del payload confirmado contra un mensaje real: el array
+// "messaging" (estilo Messenger). Cuando alguien responde un DM desde la
+// app de Instagram directamente (no desde nuestra bandeja), Meta también
+// manda un aviso de "eco" de ese mismo mensaje para sincronizar entre
+// dispositivos — con message.is_echo = true. Si no se filtra, el negocio
+// termina apareciendo como si fuera un cliente (visto en producción).
+interface InstagramMessage {
+  mid: string
+  text?: string
+  is_echo?: boolean
+  attachments?: Array<{ type: string; payload: { url: string } }>
+}
+
 interface InstagramWebhookPayload {
   object: string
   entry: Array<{
@@ -21,7 +29,7 @@ interface InstagramWebhookPayload {
       sender: { id: string }
       recipient: { id: string }
       timestamp: number
-      message?: { mid: string; text?: string; attachments?: Array<{ type: string; payload: { url: string } }> }
+      message?: InstagramMessage
     }>
     changes?: Array<{
       field: string
@@ -29,7 +37,7 @@ interface InstagramWebhookPayload {
         sender?: { id: string }
         recipient?: { id: string }
         timestamp?: number
-        message?: { mid: string; text?: string; attachments?: Array<{ type: string; payload: { url: string } }> }
+        message?: InstagramMessage
       }
     }>
   }>
@@ -37,10 +45,11 @@ interface InstagramWebhookPayload {
 
 function parseMessagingEvent(evento: {
   sender: { id: string }
-  message?: { mid: string; text?: string; attachments?: Array<{ type: string; payload: { url: string } }> }
+  message?: InstagramMessage
   timestamp: number
 }): InboundMessage | null {
   if (!evento.message) return null
+  if (evento.message.is_echo) return null // eco de un mensaje que mandó el propio negocio, no un cliente
   const attachment = evento.message.attachments?.[0]
   return {
     canal: "instagram",
