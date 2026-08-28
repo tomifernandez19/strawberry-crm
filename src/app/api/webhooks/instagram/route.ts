@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { instagramAdapter, verifyInstagramSignature } from "@/services/channels/instagram"
+import { fetchInstagramProfile, instagramAdapter, verifyInstagramSignature } from "@/services/channels/instagram"
 import { findOrCreateCustomer } from "@/services/customers"
 import { appendMessage, getOrCreateConversation } from "@/services/conversations"
 
@@ -29,16 +29,17 @@ export async function POST(request: Request) {
   const mensajes = instagramAdapter.parseWebhookPayload(payload)
 
   if (mensajes.length === 0) {
-    // Todavía no confirmado 100% el shape exacto del payload contra un
-    // mensaje real (documentación pública ambigua) — esto deja rastro en
-    // los logs de Vercel para ajustar el parser si hace falta.
+    // El formato "messaging" ya se confirmó contra un mensaje real — esto
+    // queda como red de seguridad por si Meta manda alguna variante rara.
     console.log("Webhook de Instagram sin mensajes parseados. Payload crudo:", rawBody)
   }
 
   const db = createServiceClient()
 
   for (const msg of mensajes) {
-    const customer = await findOrCreateCustomer(db, { canal: "instagram", psid: msg.clienteIdentidad.psid! })
+    const psid = msg.clienteIdentidad.psid!
+    const perfil = await fetchInstagramProfile(psid)
+    const customer = await findOrCreateCustomer(db, { canal: "instagram", psid, nombre: perfil.nombre })
     const conversation = await getOrCreateConversation(db, {
       customerId: customer.id,
       canal: "instagram",

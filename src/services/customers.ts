@@ -41,7 +41,22 @@ export async function findOrCreateCustomer(db: Db, identity: ChannelIdentity): P
     .maybeSingle()
 
   if (findError) throw findError
-  if (existing) return existing
+  if (existing) {
+    // Completa el nombre si antes no lo teníamos (ej: el webhook no lo
+    // manda, se pide aparte — puede llegar recién en un mensaje posterior).
+    if (!existing.nombre && identity.nombre) {
+      const { data: updated, error: updateError } = await db
+        .schema("atencion")
+        .from("customers")
+        .update({ nombre: identity.nombre })
+        .eq("id", existing.id)
+        .select("*")
+        .single()
+      if (updateError) throw updateError
+      return updated
+    }
+    return existing
+  }
 
   const { data: created, error: insertError } = await db
     .schema("atencion")

@@ -112,6 +112,24 @@ export const instagramAdapter: ChannelAdapter = {
   },
 }
 
+// El webhook solo manda el PSID del cliente, nunca su nombre — hay que
+// pedirlo aparte. Confirmado contra la API real con un cliente de verdad.
+export async function fetchInstagramProfile(psid: string): Promise<{ nombre?: string } > {
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN
+  if (!token) return {}
+
+  try {
+    const response = await fetch(
+      `https://graph.instagram.com/${GRAPH_API_VERSION}/${psid}?fields=name,username&access_token=${token}`
+    )
+    if (!response.ok) return {}
+    const data = (await response.json()) as { name?: string; username?: string }
+    return { nombre: data.name ?? data.username }
+  } catch {
+    return {}
+  }
+}
+
 // Firma HMAC-SHA256 del body crudo, contra el App Secret de Instagram (el
 // que aparece en Instagram > API setup with Instagram login — es distinto
 // del App Secret general de la app). Evita que cualquiera le pegue a este
