@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getCurrentProfile } from "@/lib/supabase/session"
 import { createServiceClient } from "@/lib/supabase/server"
 import { appendMessage } from "@/services/conversations"
+import { getChannelAdapter } from "@/services/channels/registry"
 
 export async function POST(request: Request, ctx: RouteContext<"/api/conversations/[id]/messages">) {
   const profile = await getCurrentProfile()
@@ -14,6 +15,25 @@ export async function POST(request: Request, ctx: RouteContext<"/api/conversatio
   }
 
   const db = createServiceClient()
+
+  const { data: conversation, error: convError } = await db
+    .schema("atencion")
+    .from("conversations")
+    .select("canal, canal_thread_id")
+    .eq("id", id)
+    .single()
+  if (convError) return NextResponse.json({ error: convError.message }, { status: 404 })
+
+  let envioError: string | null = null
+  try {
+    const adapter = getChannelAdapter(conversation.canal)
+    await adapter.sendMessage({ canalThreadId: conversation.canal_thread_id ?? "", contenido: body.contenido })
+  } catch (err) {
+    // No bloquea guardar el mensaje — queda registrado igual, y se avisa
+    // en la respuesta que el envío real por el canal falló o no existe todavía.
+    envioError = err instanceof Error ? err.message : String(err)
+  }
+
   const message = await appendMessage(db, {
     conversation_id: id,
     emisor: "humano",
@@ -31,5 +51,5 @@ export async function POST(request: Request, ctx: RouteContext<"/api/conversatio
     .eq("id", id)
     .neq("estado", "cerrada")
 
-  return NextResponse.json({ message })
+  return NextResponse.json({ message, envioError })
 }

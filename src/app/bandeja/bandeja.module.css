@@ -232,3 +232,12 @@
   opacity: 0.6;
   cursor: default;
 }
+
+.envioError {
+  color: #a66a1e;
+  background: #fbf0df;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  margin: 12px 0 0;
+}

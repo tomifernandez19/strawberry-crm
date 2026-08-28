@@ -2,6 +2,16 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function updateSession(request: NextRequest) {
+  // Los webhooks los llama Meta/Tienda Nube directo, sin cookie de sesión
+  // nuestra — no pasan por el chequeo de auth. /api/health tampoco (lo
+  // usa uptime monitoring / chequeos externos).
+  if (
+    request.nextUrl.pathname.startsWith("/api/webhooks") ||
+    request.nextUrl.pathname.startsWith("/api/health")
+  ) {
+    return NextResponse.next({ request })
+  }
+
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -24,9 +34,8 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const isLoginRoute = request.nextUrl.pathname.startsWith("/login")
-  const isPublicApi = request.nextUrl.pathname.startsWith("/api/health")
 
-  if (!user && !isLoginRoute && !isPublicApi) {
+  if (!user && !isLoginRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/login"
     return NextResponse.redirect(url)
