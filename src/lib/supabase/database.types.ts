@@ -319,7 +319,7 @@ export interface Database {
           conversation_id: string
           conversation_message_id: string | null
           contenido: string
-          clasificacion: "precio" | "stock" | "faq" | "desconocido"
+          clasificacion: "precio" | "stock" | "faq" | "aprendida" | "desconocido"
           enviar_en: string
           enviado: boolean
           created_at: string

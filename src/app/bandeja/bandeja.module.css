@@ -241,3 +241,13 @@
   font-size: 0.82rem;
   margin: 12px 0 0;
 }
+
+.guardarAprendidaLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: #5e4f53;
+  cursor: pointer;
+}

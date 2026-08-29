@@ -52,7 +52,7 @@ const PATRONES_PRECIO = [/\bprecio\b/, /\bcuanto (sale|cuesta|vale)\b/, /\bvale\
 const PATRONES_STOCK = [/\bstock\b/, /\btienen\b/, /\bqueda(n)?\b/, /\bhay\b/]
 const REGEX_TALLE = /\btalle\s*(\d{2})\b|\b(3[3-9]|4[0-2])\b/
 
-export type Clasificacion = "reclamo" | "precio" | "stock" | "faq" | "desconocido"
+export type Clasificacion = "reclamo" | "precio" | "stock" | "faq" | "aprendida" | "desconocido"
 
 export interface ResultadoClasificacion {
   clasificacion: Clasificacion
@@ -66,19 +66,30 @@ async function buscarModeloMencionado(db: Db, textoNormalizado: string) {
   return (modelos ?? []).find((m) => textoNormalizado.includes(normalizar(m.descripcion)))
 }
 
+function coincideLoSuficiente(textoReferencia: string, textoNormalizado: string): boolean {
+  const palabras = normalizar(textoReferencia)
+    .split(/\W+/)
+    .filter((p) => p.length > 3)
+  if (palabras.length === 0) return false
+
+  const coincidencias = palabras.filter((p) => textoNormalizado.includes(p)).length
+  return coincidencias / palabras.length >= 0.6
+}
+
 async function buscarFaq(db: Db, textoNormalizado: string) {
   const { data: faqs } = await db.schema("atencion").from("faq").select("*").eq("activo", true)
+  return (faqs ?? []).find((faq) => coincideLoSuficiente(faq.pregunta, textoNormalizado)) ?? null
+}
 
-  for (const faq of faqs ?? []) {
-    const palabrasFaq = normalizar(faq.pregunta)
-      .split(/\W+/)
-      .filter((p) => p.length > 3)
-    if (palabrasFaq.length === 0) continue
-
-    const coincidencias = palabrasFaq.filter((p) => textoNormalizado.includes(p)).length
-    if (coincidencias / palabrasFaq.length >= 0.6) return faq
-  }
-  return null
+// Respuestas que un humano decidió guardar a mano desde la bandeja
+// ("Fase 11 lite", sin IA) — mismo criterio de coincidencia que la FAQ.
+async function buscarRespuestaAprendida(db: Db, textoNormalizado: string) {
+  const { data: aprendidas } = await db
+    .schema("atencion")
+    .from("learned_answers")
+    .select("*")
+    .eq("estado", "aprobada")
+  return (aprendidas ?? []).find((a) => coincideLoSuficiente(a.pregunta_original, textoNormalizado)) ?? null
 }
 
 export async function clasificarYResponder(db: Db, mensaje: string): Promise<ResultadoClasificacion> {
@@ -149,8 +160,36 @@ export async function clasificarYResponder(db: Db, mensaje: string): Promise<Res
     }
   }
 
+  // Antes de rendirse: ¿un humano ya contestó algo parecido antes? Va
+  // después de precio/stock a propósito — un precio en vivo del ERP
+  // siempre le gana a una respuesta guardada que podría estar vieja.
+  const aprendida = await buscarRespuestaAprendida(db, normalizado)
+  if (aprendida) {
+    await db
+      .schema("atencion")
+      .from("learned_answers")
+      .update({ veces_reutilizada: aprendida.veces_reutilizada + 1 })
+      .eq("id", aprendida.id)
+    return { clasificacion: "aprendida", respuesta: aprendida.respuesta_final }
+  }
+
   // No matcheó nada confiable — nunca se inventa, se manda a esperar.
   return { clasificacion: "desconocido", respuesta: MENSAJE_ESPERA }
+}
+
+export async function guardarRespuestaAprendida(
+  db: Db,
+  params: { preguntaOriginal: string; respuestaFinal: string; canal: string; aprobadoPor: string; conversationMessageId?: string }
+) {
+  const { error } = await db.schema("atencion").from("learned_answers").insert({
+    pregunta_original: params.preguntaOriginal,
+    respuesta_final: params.respuestaFinal,
+    canal: params.canal,
+    estado: "aprobada",
+    aprobado_por: params.aprobadoPor,
+    conversation_message_id: params.conversationMessageId,
+  })
+  if (error) throw error
 }
 
 export async function programarRespuesta(

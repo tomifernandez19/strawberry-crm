@@ -3,6 +3,7 @@ import { getCurrentProfile } from "@/lib/supabase/session"
 import { createServiceClient } from "@/lib/supabase/server"
 import { appendMessage } from "@/services/conversations"
 import { getChannelAdapter } from "@/services/channels/registry"
+import { guardarRespuestaAprendida } from "@/services/rule-based-responder"
 
 export async function POST(request: Request, ctx: RouteContext<"/api/conversations/[id]/messages">) {
   const profile = await getCurrentProfile()
@@ -50,6 +51,28 @@ export async function POST(request: Request, ctx: RouteContext<"/api/conversatio
     .update({ estado: "ia_respondiendo" })
     .eq("id", id)
     .neq("estado", "cerrada")
+
+  if (body.guardarComoAprendida) {
+    const { data: ultimoMensajeCliente } = await db
+      .schema("atencion")
+      .from("conversation_messages")
+      .select("id, contenido")
+      .eq("conversation_id", id)
+      .eq("emisor", "cliente")
+      .order("enviado_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (ultimoMensajeCliente?.contenido) {
+      await guardarRespuestaAprendida(db, {
+        preguntaOriginal: ultimoMensajeCliente.contenido,
+        respuestaFinal: body.contenido,
+        canal: conversation.canal,
+        aprobadoPor: profile.id,
+        conversationMessageId: ultimoMensajeCliente.id,
+      })
+    }
+  }
 
   return NextResponse.json({ message, envioError })
 }
