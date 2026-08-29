@@ -59,7 +59,7 @@ export interface ResultadoClasificacion {
   respuesta: string | null // null = no auto-responder (reclamo, o desconocido sin mensaje de espera)
 }
 
-const MENSAJE_ESPERA = "¡Hola! Ya te averiguo y te paso en un ratito 🙂"
+const MENSAJE_ESPERA = "Ya te averiguo y te paso en un ratito 🙂"
 
 async function buscarModeloMencionado(db: Db, textoNormalizado: string) {
   const { data: modelos } = await db.from("modelos").select("id, descripcion").eq("activo", true)

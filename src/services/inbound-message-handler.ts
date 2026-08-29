@@ -27,6 +27,14 @@ export async function procesarMensajeEntrante(
     canal: msg.canal,
     canalThreadId: msg.canalThreadId,
   })
+
+  const { count: mensajesPrevios } = await db
+    .schema("atencion")
+    .from("conversation_messages")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", conversation.id)
+  const esPrimerMensaje = (mensajesPrevios ?? 0) === 0
+
   const mensajeGuardado = await appendMessage(db, {
     conversation_id: conversation.id,
     emisor: "cliente",
@@ -52,10 +60,11 @@ export async function procesarMensajeEntrante(
   }
 
   if (resultado.respuesta) {
+    const saludo = esPrimerMensaje ? (customer.nombre ? `¡Hola ${customer.nombre}! ` : "¡Hola! ") : ""
     await programarRespuesta(db, {
       conversationId: conversation.id,
       conversationMessageId: mensajeGuardado.id,
-      contenido: resultado.respuesta,
+      contenido: `${saludo}${resultado.respuesta}`,
       clasificacion: resultado.clasificacion,
     })
   }
