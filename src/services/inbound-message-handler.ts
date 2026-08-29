@@ -37,7 +37,12 @@ export async function procesarMensajeEntrante(
     enviado_at: msg.timestamp,
   })
 
-  if (!msg.contenido) return // audio/imagen sin texto: nada que clasificar, queda para un humano
+  if (!msg.contenido) {
+    // Audio/imagen sin texto: no hay nada que clasificar. Se marca para
+    // que un humano la vea — si no, queda invisible en la bandeja.
+    await setConversationEstado(db, conversation.id, "intervencion_humana")
+    return
+  }
 
   const resultado = await clasificarYResponder(db, msg.contenido)
 
@@ -53,5 +58,11 @@ export async function procesarMensajeEntrante(
       contenido: resultado.respuesta,
       clasificacion: resultado.clasificacion,
     })
+  }
+
+  if (resultado.clasificacion === "desconocido") {
+    // Se mandó el mensaje de espera, pero eso solo cumple la promesa si
+    // alguien la responde de verdad después — se marca para que no se pierda.
+    await setConversationEstado(db, conversation.id, "intervencion_humana")
   }
 }
