@@ -1,7 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { fetchInstagramProfile, instagramAdapter, verifyInstagramSignature } from "@/services/channels/instagram"
-import { findOrCreateCustomer } from "@/services/customers"
-import { appendMessage, getOrCreateConversation } from "@/services/conversations"
+import { procesarMensajeEntrante } from "@/services/inbound-message-handler"
 
 // Handshake de verificación: Meta lo llama una vez al configurar el webhook.
 export async function GET(request: Request) {
@@ -16,8 +15,8 @@ export async function GET(request: Request) {
   return new Response(challenge, { status: 200 })
 }
 
-// Mensajes entrantes reales. Sin agente de IA todavía (Fase 10) — cada
-// mensaje nuevo queda esperando en la bandeja para que lo respondas vos.
+// Mensajes entrantes reales. Clasificación por reglas sin IA (gratis) —
+// ver rule-based-responder.ts. El agente de Claude de verdad es Fase 10.
 export async function POST(request: Request) {
   const rawBody = await request.text()
 
@@ -37,23 +36,8 @@ export async function POST(request: Request) {
   const db = createServiceClient()
 
   for (const msg of mensajes) {
-    const psid = msg.clienteIdentidad.psid!
-    const perfil = await fetchInstagramProfile(psid)
-    const customer = await findOrCreateCustomer(db, { canal: "instagram", psid, nombre: perfil.nombre })
-    const conversation = await getOrCreateConversation(db, {
-      customerId: customer.id,
-      canal: "instagram",
-      canalThreadId: msg.canalThreadId,
-    })
-    await appendMessage(db, {
-      conversation_id: conversation.id,
-      emisor: "cliente",
-      contenido: msg.contenido ?? null,
-      tipo_contenido: msg.tipoContenido,
-      media_url: msg.mediaUrl ?? null,
-      canal_message_id: msg.canalMessageId,
-      enviado_at: msg.timestamp,
-    })
+    const perfil = await fetchInstagramProfile(msg.clienteIdentidad.psid!)
+    await procesarMensajeEntrante(db, msg, perfil.nombre)
   }
 
   // Meta reintenta si no devolvemos 200 rápido.

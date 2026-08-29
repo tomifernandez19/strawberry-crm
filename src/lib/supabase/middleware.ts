@@ -5,10 +5,12 @@ export async function updateSession(request: NextRequest) {
   // Los webhooks los llama Meta/Tienda Nube directo, sin cookie de sesión
   // nuestra — no pasan por el chequeo de auth. /api/health tampoco (lo usa
   // uptime monitoring / chequeos externos). /privacidad tiene que ser
-  // pública para que Meta pueda validarla al publicar la app.
+  // pública para que Meta pueda validarla al publicar la app. /api/cron
+  // lo llama pg_cron (Supabase) — se autentica con CRON_SECRET, no con sesión.
   if (
     request.nextUrl.pathname.startsWith("/api/webhooks") ||
     request.nextUrl.pathname.startsWith("/api/health") ||
+    request.nextUrl.pathname.startsWith("/api/cron") ||
     request.nextUrl.pathname.startsWith("/privacidad")
   ) {
     return NextResponse.next({ request })

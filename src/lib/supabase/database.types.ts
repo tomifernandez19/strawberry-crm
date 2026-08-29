@@ -313,6 +313,26 @@ export interface Database {
         Update: Partial<Database["atencion"]["Tables"]["human_approvals"]["Row"]>
         Relationships: []
       }
+      respuestas_programadas: {
+        Row: {
+          id: string
+          conversation_id: string
+          conversation_message_id: string | null
+          contenido: string
+          clasificacion: "precio" | "stock" | "faq" | "desconocido"
+          enviar_en: string
+          enviado: boolean
+          created_at: string
+        }
+        Insert: Partial<Database["atencion"]["Tables"]["respuestas_programadas"]["Row"]> & {
+          conversation_id: string
+          contenido: string
+          clasificacion: Database["atencion"]["Tables"]["respuestas_programadas"]["Row"]["clasificacion"]
+          enviar_en: string
+        }
+        Update: Partial<Database["atencion"]["Tables"]["respuestas_programadas"]["Row"]>
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
