@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
-import type { ChannelAdapter, InboundMessage, OutboundMessage } from "./types"
+import type { ChannelAdapter, EchoMessage, InboundMessage, OutboundMessage, ParsedWebhookPayload } from "./types"
 
 // "Instagram API con Instagram Login" (el flujo que terminó usando esta app,
 // no el viejo basado en Página de Facebook) — confirmado contra la
@@ -45,21 +45,40 @@ interface InstagramWebhookPayload {
 
 function parseMessagingEvent(evento: {
   sender: { id: string }
+  recipient?: { id: string }
   message?: InstagramMessage
   timestamp: number
-}): InboundMessage | null {
-  if (!evento.message) return null
-  if (evento.message.is_echo) return null // eco de un mensaje que mandó el propio negocio, no un cliente
+}): { mensaje?: InboundMessage; eco?: EchoMessage } {
+  if (!evento.message) return {}
+
+  if (evento.message.is_echo) {
+    // El "cliente" del eco es el destinatario (recipient), no el sender
+    // (que acá es el propio negocio) — si no hay recipient, no hay forma
+    // de saber a qué conversación pertenece, se descarta.
+    if (!evento.recipient) return {}
+    return {
+      eco: {
+        canal: "instagram",
+        canalThreadId: evento.recipient.id,
+        canalMessageId: evento.message.mid,
+        contenido: evento.message.text,
+        timestamp: new Date(evento.timestamp).toISOString(),
+      },
+    }
+  }
+
   const attachment = evento.message.attachments?.[0]
   return {
-    canal: "instagram",
-    canalThreadId: evento.sender.id,
-    canalMessageId: evento.message.mid,
-    clienteIdentidad: { psid: evento.sender.id },
-    tipoContenido: attachment ? (attachment.type === "image" ? "imagen" : "documento") : "texto",
-    contenido: evento.message.text,
-    mediaUrl: attachment?.payload.url,
-    timestamp: new Date(evento.timestamp).toISOString(),
+    mensaje: {
+      canal: "instagram",
+      canalThreadId: evento.sender.id,
+      canalMessageId: evento.message.mid,
+      clienteIdentidad: { psid: evento.sender.id },
+      tipoContenido: attachment ? (attachment.type === "image" ? "imagen" : "documento") : "texto",
+      contenido: evento.message.text,
+      mediaUrl: attachment?.payload.url,
+      timestamp: new Date(evento.timestamp).toISOString(),
+    },
   }
 }
 
@@ -74,28 +93,32 @@ export const instagramAdapter: ChannelAdapter = {
     return null
   },
 
-  parseWebhookPayload(payload: unknown): InboundMessage[] {
+  parseWebhookPayload(payload: unknown): ParsedWebhookPayload {
     const data = payload as InstagramWebhookPayload
     const mensajes: InboundMessage[] = []
+    const ecos: EchoMessage[] = []
 
     for (const entry of data.entry ?? []) {
       for (const evento of entry.messaging ?? []) {
-        const parsed = parseMessagingEvent(evento)
-        if (parsed) mensajes.push(parsed)
+        const { mensaje, eco } = parseMessagingEvent(evento)
+        if (mensaje) mensajes.push(mensaje)
+        if (eco) ecos.push(eco)
       }
 
       for (const cambio of entry.changes ?? []) {
         if (cambio.field !== "messages" || !cambio.value.sender) continue
-        const parsed = parseMessagingEvent({
+        const { mensaje, eco } = parseMessagingEvent({
           sender: cambio.value.sender,
+          recipient: cambio.value.recipient,
           message: cambio.value.message,
           timestamp: cambio.value.timestamp ?? Date.now(),
         })
-        if (parsed) mensajes.push(parsed)
+        if (mensaje) mensajes.push(mensaje)
+        if (eco) ecos.push(eco)
       }
     }
 
-    return mensajes
+    return { mensajes, ecos }
   },
 
   async sendMessage(message: OutboundMessage): Promise<void> {

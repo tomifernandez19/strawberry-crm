@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/supabase/database.types"
-import type { InboundMessage } from "./channels/types"
+import type { EchoMessage, InboundMessage } from "./channels/types"
 import { findOrCreateCustomer } from "./customers"
 import { appendMessage, getOrCreateConversation, setConversationEstado } from "./conversations"
 import { clasificarYResponder, programarRespuesta } from "./rule-based-responder"
@@ -74,4 +74,35 @@ export async function procesarMensajeEntrante(
     // alguien la responde de verdad después — se marca para que no se pierda.
     await setConversationEstado(db, conversation.id, "intervencion_humana")
   }
+}
+
+// Cuando alguien responde un DM desde la app del canal directamente (no
+// desde la bandeja), Meta avisa con un "eco" en vez de silencio — se
+// guarda como respuesta humana real, para que el historial de la bandeja
+// quede completo sin importar desde dónde se respondió.
+export async function procesarEcoSaliente(db: Db, eco: EchoMessage): Promise<void> {
+  if (!eco.contenido) return
+
+  const column =
+    eco.canal === "instagram" || eco.canal === "messenger"
+      ? { canal: eco.canal, psid: eco.canalThreadId }
+      : { canal: "whatsapp" as const, wa_id: eco.canalThreadId }
+
+  const customer = await findOrCreateCustomer(db, column)
+  const conversation = await getOrCreateConversation(db, {
+    customerId: customer.id,
+    canal: eco.canal,
+    canalThreadId: eco.canalThreadId,
+  })
+
+  await appendMessage(db, {
+    conversation_id: conversation.id,
+    emisor: "humano",
+    contenido: eco.contenido,
+    tipo_contenido: "texto",
+    canal_message_id: eco.canalMessageId,
+    enviado_at: eco.timestamp,
+  })
+
+  await setConversationEstado(db, conversation.id, "ia_respondiendo")
 }

@@ -19,9 +19,25 @@ export interface OutboundMessage {
   contenido: string
 }
 
+// Cuando alguien responde desde la app del canal directamente (no desde
+// la bandeja), algunos canales avisan igual con un "eco" — se guarda como
+// mensaje humano, no como si fuera del cliente.
+export interface EchoMessage {
+  canal: Canal
+  canalThreadId: string // el cliente (destinatario del eco), no el negocio
+  canalMessageId: string
+  contenido?: string
+  timestamp: string
+}
+
+export interface ParsedWebhookPayload {
+  mensajes: InboundMessage[]
+  ecos: EchoMessage[]
+}
+
 export interface ChannelAdapter {
   canal: Canal
   verifyWebhook(params: { mode?: string; token?: string; challenge?: string }): string | null
-  parseWebhookPayload(payload: unknown): InboundMessage[]
+  parseWebhookPayload(payload: unknown): ParsedWebhookPayload
   sendMessage(message: OutboundMessage): Promise<void>
 }
