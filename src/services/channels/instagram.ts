@@ -1,5 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
-import type { ChannelAdapter, EchoMessage, InboundMessage, OutboundMessage, ParsedWebhookPayload } from "./types"
+import type {
+  ChannelAdapter,
+  EchoMessage,
+  InboundMessage,
+  OutboundMessage,
+  ParsedWebhookPayload,
+  SendMessageResult,
+} from "./types"
 
 // "Instagram API con Instagram Login" (el flujo que terminó usando esta app,
 // no el viejo basado en Página de Facebook) — confirmado contra la
@@ -121,7 +128,7 @@ export const instagramAdapter: ChannelAdapter = {
     return { mensajes, ecos }
   },
 
-  async sendMessage(message: OutboundMessage): Promise<void> {
+  async sendMessage(message: OutboundMessage): Promise<SendMessageResult> {
     const token = process.env.INSTAGRAM_ACCESS_TOKEN
     if (!token) throw new Error("Falta INSTAGRAM_ACCESS_TOKEN")
 
@@ -141,6 +148,13 @@ export const instagramAdapter: ChannelAdapter = {
     if (!response.ok) {
       throw new Error(`Instagram sendMessage falló (${response.status}): ${await response.text()}`)
     }
+
+    // Meta manda el mismo id como "mid" en el eco del webhook que llega
+    // después — guardarlo acá es lo que permite reconocer ese eco como
+    // propio en vez de tratarlo como si un humano hubiera respondido desde
+    // la app de Instagram directamente.
+    const data = (await response.json()) as { message_id?: string }
+    return { canalMessageId: data.message_id }
   },
 }
 

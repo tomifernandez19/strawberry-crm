@@ -35,9 +35,13 @@ export interface ParsedWebhookPayload {
   ecos: EchoMessage[]
 }
 
+export interface SendMessageResult {
+  canalMessageId?: string
+}
+
 export interface ChannelAdapter {
   canal: Canal
   verifyWebhook(params: { mode?: string; token?: string; challenge?: string }): string | null
   parseWebhookPayload(payload: unknown): ParsedWebhookPayload
-  sendMessage(message: OutboundMessage): Promise<void>
+  sendMessage(message: OutboundMessage): Promise<SendMessageResult>
 }

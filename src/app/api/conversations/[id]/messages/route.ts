@@ -26,9 +26,11 @@ export async function POST(request: Request, ctx: RouteContext<"/api/conversatio
   if (convError) return NextResponse.json({ error: convError.message }, { status: 404 })
 
   let envioError: string | null = null
+  let canalMessageId: string | null = null
   try {
     const adapter = getChannelAdapter(conversation.canal)
-    await adapter.sendMessage({ canalThreadId: conversation.canal_thread_id ?? "", contenido: body.contenido })
+    const envio = await adapter.sendMessage({ canalThreadId: conversation.canal_thread_id ?? "", contenido: body.contenido })
+    canalMessageId = envio.canalMessageId ?? null
   } catch (err) {
     // No bloquea guardar el mensaje — queda registrado igual, y se avisa
     // en la respuesta que el envío real por el canal falló o no existe todavía.
@@ -41,6 +43,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/conversatio
     autor_id: profile.id,
     contenido: body.contenido,
     tipo_contenido: "texto",
+    canal_message_id: canalMessageId,
   })
 
   // La conversación vuelve a manos de la IA salvo que ya esté cerrada —

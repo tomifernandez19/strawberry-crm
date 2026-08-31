@@ -97,6 +97,19 @@ export async function procesarMensajeEntrante(
 export async function procesarEcoSaliente(db: Db, eco: EchoMessage): Promise<void> {
   if (!eco.contenido) return
 
+  // Si el mid del eco ya está guardado (lo grabamos nosotros al mandar el
+  // mensaje, desde la bandeja o desde el cron), es un eco de nuestro propio
+  // envío, no una respuesta humana nueva desde la app de Instagram — se
+  // ignora. Si no, se duplica el mensaje en el historial y, peor, se pisa
+  // el estado "intervencion_humana" que se acaba de marcar.
+  const { data: yaRegistrado } = await db
+    .schema("atencion")
+    .from("conversation_messages")
+    .select("id")
+    .eq("canal_message_id", eco.canalMessageId)
+    .maybeSingle()
+  if (yaRegistrado) return
+
   const column =
     eco.canal === "instagram" || eco.canal === "messenger"
       ? { canal: eco.canal, psid: eco.canalThreadId }

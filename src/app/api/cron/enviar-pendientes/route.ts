@@ -39,13 +39,17 @@ export async function POST(request: Request) {
       if (!conversation) throw new Error("Conversación no encontrada")
 
       const adapter = getChannelAdapter(conversation.canal as Canal)
-      await adapter.sendMessage({ canalThreadId: conversation.canal_thread_id ?? "", contenido: pendiente.contenido })
+      const envio = await adapter.sendMessage({
+        canalThreadId: conversation.canal_thread_id ?? "",
+        contenido: pendiente.contenido,
+      })
 
       await appendMessage(db, {
         conversation_id: pendiente.conversation_id,
         emisor: "ia",
         contenido: pendiente.contenido,
         tipo_contenido: "texto",
+        canal_message_id: envio.canalMessageId ?? null,
       })
 
       await db
