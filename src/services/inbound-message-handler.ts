@@ -59,6 +59,26 @@ export async function procesarMensajeEntrante(
     return
   }
 
+  if (resultado.clasificacion === "desconocido") {
+    if (conversation.estado === "intervencion_humana") {
+      // Ya se le avisó una vez y sigue esperando que un humano la atienda
+      // (nadie respondió todavía) — no repetir el mensaje de espera en
+      // cada mensaje nuevo que mande el cliente mientras tanto.
+      return
+    }
+    const saludo = esPrimerMensaje ? (customer.nombre ? `¡Hola ${customer.nombre}! ` : "¡Hola! ") : ""
+    await programarRespuesta(db, {
+      conversationId: conversation.id,
+      conversationMessageId: mensajeGuardado.id,
+      contenido: `${saludo}${resultado.respuesta}`,
+      clasificacion: resultado.clasificacion,
+    })
+    // Se mandó el mensaje de espera, pero eso solo cumple la promesa si
+    // alguien la responde de verdad después — se marca para que no se pierda.
+    await setConversationEstado(db, conversation.id, "intervencion_humana")
+    return
+  }
+
   if (resultado.respuesta) {
     const saludo = esPrimerMensaje ? (customer.nombre ? `¡Hola ${customer.nombre}! ` : "¡Hola! ") : ""
     await programarRespuesta(db, {
@@ -67,12 +87,6 @@ export async function procesarMensajeEntrante(
       contenido: `${saludo}${resultado.respuesta}`,
       clasificacion: resultado.clasificacion,
     })
-  }
-
-  if (resultado.clasificacion === "desconocido") {
-    // Se mandó el mensaje de espera, pero eso solo cumple la promesa si
-    // alguien la responde de verdad después — se marca para que no se pierda.
-    await setConversationEstado(db, conversation.id, "intervencion_humana")
   }
 }
 
