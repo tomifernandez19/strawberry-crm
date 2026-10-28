@@ -24,6 +24,8 @@ interface InstagramMessage {
   mid: string
   text?: string
   is_echo?: boolean
+  // Cuando la clienta responde una historia nuestra, Meta manda la URL de esa historia.
+  reply_to?: { story?: { url?: string; id?: string } }
   attachments?: Array<{ type: string; payload: { url: string } }>
 }
 
@@ -84,6 +86,9 @@ function parseMessagingEvent(evento: {
       tipoContenido: attachment ? (attachment.type === "image" ? "imagen" : "documento") : "texto",
       contenido: evento.message.text,
       mediaUrl: attachment?.payload.url,
+      contexto: evento.message.reply_to?.story?.url
+        ? { historia: { url: evento.message.reply_to.story.url, id: evento.message.reply_to.story.id } }
+        : undefined,
       timestamp: new Date(evento.timestamp).toISOString(),
     },
   }

@@ -350,3 +350,16 @@
   color: #8a561a;
   font-size: 0.9rem;
 }
+
+.historiaRef {
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+  color: #8b7a7e;
+}
+
+.historiaRef img {
+  display: block;
+  margin-top: 4px;
+  max-width: 120px;
+  border-radius: 8px;
+}

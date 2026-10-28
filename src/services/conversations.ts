@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/supabase/database.types"
+import { avisarEquipo } from "./notifications"
 
 type Db = SupabaseClient<Database>
 type Conversation = Database["atencion"]["Tables"]["conversations"]["Row"]
@@ -100,6 +101,22 @@ export async function setConversationEstado(
     .single()
 
   if (error) throw error
+
+  // Aviso al celular del equipo cada vez que una conversación pasa a esperarlo.
+  if (extra?.motivoAtencion && (estado === "intervencion_humana" || estado === "requiere_aprobacion")) {
+    const { data: customer } = await db
+      .schema("atencion")
+      .from("customers")
+      .select("nombre")
+      .eq("id", data.customer_id)
+      .maybeSingle()
+    await avisarEquipo(db, {
+      conversationId: conversationId,
+      titulo: estado === "requiere_aprobacion" ? "Borrador listo para aprobar" : "Una clienta espera al equipo",
+      mensaje: `${customer?.nombre ?? "Clienta sin nombre"} · ${data.canal}`,
+    })
+  }
+
   return data
 }
 

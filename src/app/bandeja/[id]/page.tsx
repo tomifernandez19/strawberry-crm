@@ -68,6 +68,13 @@ export default async function ConversationDetailPage({
         {messages.length === 0 && <p style={{ color: "#8b7a7e" }}>Sin mensajes todavía.</p>}
         {messages.map((m) => (
           <div key={m.id} className={`${styles.bubble} ${styles[m.emisor]}`}>
+            {(m.contexto as { historia?: { url?: string } } | null)?.historia?.url && (
+              <div className={styles.historiaRef}>
+                ↪ Respondió a una historia
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={(m.contexto as { historia: { url: string } }).historia.url} alt="Historia" />
+              </div>
+            )}
             {m.media_url && m.tipo_contenido === "imagen" && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={m.media_url} alt="Imagen" style={{ maxWidth: "100%", borderRadius: 8, marginBottom: 4 }} />

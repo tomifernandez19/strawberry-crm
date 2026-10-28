@@ -11,6 +11,8 @@ export interface InboundMessage {
   tipoContenido: "texto" | "imagen" | "audio" | "documento" | "ubicacion"
   contenido?: string
   mediaUrl?: string
+  // Contexto del mensaje: p. ej. la historia nuestra a la que respondió la clienta.
+  contexto?: { historia?: { url: string; id?: string } }
   timestamp: string
 }
 

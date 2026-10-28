@@ -124,6 +124,19 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["modelo_id"],
     },
   },
+  {
+    name: "ver_fotos_modelos",
+    description:
+      "Te muestra UNA foto de cada modelo indicado (hasta 8 por llamada) para que los compares con una imagen que mandó la clienta " +
+      "(por ejemplo la historia a la que respondió) e identifiques cuál es. Pasá los modelo_id que devolvió buscar_productos.",
+    input_schema: {
+      type: "object",
+      properties: {
+        modelo_ids: { type: "array", items: { type: "string" }, description: "modelo_id de los candidatos (máx. 8)" },
+      },
+      required: ["modelo_ids"],
+    },
+  },
 ]
 
 interface ContextoHerramientas {
@@ -297,7 +310,7 @@ async function buscarProductos(
     const link = g.modeloIds.map((id) => fotosPorModelo.get(id)?.link).find(Boolean) ?? null
 
     return {
-      modelo_id: g.modeloIds[0],
+      modelo_id: g.modeloIds.find((id) => (fotosPorModelo.get(id)?.fotos.length ?? 0) > 0) ?? g.modeloIds[0],
       nombre: g.nombre,
       categoria: g.categoria,
       material: g.material,
@@ -344,10 +357,36 @@ async function obtenerFotosYLink(ctx: ContextoHerramientas, input: { modelo_id: 
     : { fotos: [], link_producto: link, nota: "Este modelo no tiene fotos cargadas en la tienda online." }
 }
 
+// Devuelve imágenes (no JSON) para que el modelo las mire: una foto por modelo.
+async function verFotosModelos(
+  ctx: ContextoHerramientas,
+  input: { modelo_ids: string[] }
+): Promise<Anthropic.ToolResultBlockParam["content"]> {
+  const ids = (input.modelo_ids ?? []).slice(0, 8)
+  const { data: filas } = await ctx.db
+    .schema("atencion")
+    .from("fotos_producto")
+    .select("modelo_id, fotos")
+    .in("modelo_id", ids.length > 0 ? ids : ["00000000-0000-0000-0000-000000000000"])
+  const { data: modelos } = await ctx.db.from("modelos").select("id, descripcion").in("id", ids.length > 0 ? ids : ["00000000-0000-0000-0000-000000000000"])
+  const nombre = new Map((modelos ?? []).map((m) => [m.id, m.descripcion]))
+
+  const bloques: Anthropic.Messages.ToolResultBlockParam["content"] & unknown[] = []
+  for (const fila of filas ?? []) {
+    const foto = ((fila.fotos ?? []) as unknown as FotoCache[])[0]
+    if (!foto) continue
+    bloques.push({ type: "text", text: `Modelo ${nombre.get(fila.modelo_id) ?? ""} (modelo_id ${fila.modelo_id}):` })
+    bloques.push({ type: "image", source: { type: "url", url: foto.src } })
+  }
+  if (bloques.length === 0) return JSON.stringify({ nota: "Ninguno de esos modelos tiene fotos cargadas." })
+  return bloques
+}
+
 async function ejecutarHerramienta(ctx: ContextoHerramientas, nombre: string, input: unknown): Promise<unknown> {
   try {
     if (nombre === "buscar_productos") return await buscarProductos(ctx, (input ?? {}) as never)
     if (nombre === "obtener_fotos_y_link") return await obtenerFotosYLink(ctx, input as never)
+    if (nombre === "ver_fotos_modelos") return await verFotosModelos(ctx, input as never)
     return { error: `Herramienta desconocida: ${nombre}` }
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) }
@@ -391,6 +430,8 @@ REGLAS DE DATOS
 
 - Reservas: se puede reservar un producto con una seña a partir de $10.000 (está en los datos del negocio). Si la clienta pregunta si se puede reservar, confirmalo en una línea con ese monto. Si quiere avanzar con la reserva (o pregunta cómo pagar la seña o cuándo retirar), usá "responder_y_derivar" con un mensaje corto tipo "Dale! Te paso con el equipo para coordinar la reserva 🙌🏼". No gestiones nada más vos.
 - Horarios: las sucursales tienen horarios distintos a la tarde; si no dice cuál sucursal, informá los de las dos en una línea cada una.
+- Imágenes: si la clienta respondió a una historia nuestra o mandó una foto, mirá la imagen, identificá el producto (si trae el nombre escrito, usalo) y buscalo con buscar_productos (tipo de calzado, color, nombre). Si quedan varios candidatos parecidos, compará con ver_fotos_modelos (hasta 8 por vez) y elegí el que coincide. Después respondé lo que pregunta (stock del talle, precio, etc.) sobre ESE modelo y mencionalo por su nombre para que ella confirme. Si no podés identificar el producto con seguridad (o la imagen no se pudo ver), no adivines: usá "derivar" con el motivo "No pude identificar el producto de la historia/foto".
+
 CONVERSACIÓN
 - El historial puede incluir mensajes del equipo humano de la tienda (aparecen como tuyos). Si una persona del equipo venía gestionando algo y la clienta lo continúa, derivá.
 - "Gracias", "ok", "dale", emojis sueltos o despedidas no necesitan respuesta: acción "sin_respuesta".
@@ -424,6 +465,25 @@ async function cargarInfoNegocio(db: Db): Promise<string> {
     .eq("estado", "activo")
     .order("tema")
   return (data ?? []).map((k) => `- ${k.titulo}: ${k.contenido}`).join("\n")
+}
+
+// Descarga la imagen de una historia o una foto que mandó la clienta, para
+// que el modelo la vea. Si es un video, vence o no se puede bajar, devuelve null.
+async function cargarImagen(url: string): Promise<Anthropic.ImageBlockParam | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return null
+    const tipo = (res.headers.get("content-type") ?? "").split(";")[0].trim()
+    if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(tipo)) return null
+    const bytes = Buffer.from(await res.arrayBuffer())
+    if (bytes.length > 4_000_000) return null
+    return {
+      type: "image",
+      source: { type: "base64", media_type: tipo as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: bytes.toString("base64") },
+    }
+  } catch {
+    return null
+  }
 }
 
 // ------------------------------------------------------------------ resultado
@@ -470,6 +530,36 @@ export async function responderConsulta(
   while (mensajes.length > 0 && mensajes[0].role !== "user") mensajes.shift()
   if (mensajes.length === 0 || mensajes[mensajes.length - 1].role !== "user") {
     return derivar("sin_mensaje_pendiente")
+  }
+
+  // Si en el último tramo de mensajes de la clienta hay una respuesta a una
+  // historia o una foto, la IA la ve (solo la más reciente, para no gastar de más).
+  const cola: typeof historial = []
+  for (const m of [...historial].filter((x) => x.emisor !== "sistema").reverse()) {
+    if (m.emisor !== "cliente") break
+    cola.push(m)
+  }
+  const conImagen = cola.find((m) => {
+    const ctxMsg = m.contexto as { historia?: { url?: string } } | null
+    return Boolean(ctxMsg?.historia?.url) || (m.tipo_contenido === "imagen" && m.media_url)
+  })
+  if (conImagen) {
+    const ctxMsg = conImagen.contexto as { historia?: { url?: string } } | null
+    const esHistoria = Boolean(ctxMsg?.historia?.url)
+    const imagen = await cargarImagen((ctxMsg?.historia?.url ?? conImagen.media_url) as string)
+    const ultimo = mensajes[mensajes.length - 1]
+    const textoPrevio = typeof ultimo.content === "string" ? ultimo.content : ""
+    if (imagen) {
+      ultimo.content = [
+        imagen,
+        {
+          type: "text",
+          text: `${esHistoria ? "[La clienta respondió a una historia nuestra: es la imagen de arriba]" : "[La clienta mandó la imagen de arriba]"}\n${textoPrevio}`,
+        },
+      ]
+    } else {
+      ultimo.content = `${esHistoria ? "[La clienta respondió a una historia nuestra, pero no se pudo ver la imagen (puede ser un video o haber vencido)]" : "[La clienta mandó una imagen que no se pudo ver]"}\n${textoPrevio}`
+    }
   }
 
   const infoNegocio = await cargarInfoNegocio(db)
@@ -521,7 +611,7 @@ export async function responderConsulta(
         if (bloque.type !== "tool_use") continue
         fuentes.push({ herramienta: bloque.name, entrada: bloque.input })
         const salida = await ejecutarHerramienta(ctx, bloque.name, bloque.input)
-        resultados.push({ type: "tool_result", tool_use_id: bloque.id, content: JSON.stringify(salida) })
+        resultados.push({ type: "tool_result", tool_use_id: bloque.id, content: typeof salida === "string" || Array.isArray(salida) ? (salida as never) : JSON.stringify(salida) })
       }
       mensajes.push({ role: "user", content: resultados })
       continue

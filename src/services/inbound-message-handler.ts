@@ -42,12 +42,17 @@ export async function procesarMensajeEntrante(
     contenido: msg.contenido ?? null,
     tipo_contenido: msg.tipoContenido,
     media_url: msg.mediaUrl ?? null,
+    contexto: (msg.contexto ?? null) as never,
     canal_message_id: msg.canalMessageId,
     enviado_at: msg.timestamp,
   })
 
-  if (!msg.contenido) {
-    // Audio/imagen sin texto: no hay nada que clasificar. Se marca para
+  const { modo } = await getAjustesIa(db)
+  // Con la IA prendida, una foto sin texto sí se procesa (la IA puede verla).
+  const iaPuedeVerla = modo !== "apagado" && msg.tipoContenido === "imagen"
+
+  if (!msg.contenido && !iaPuedeVerla) {
+    // Audio/archivo sin texto: no hay nada que clasificar. Se marca para
     // que un humano la vea — si no, queda invisible en la bandeja.
     await setConversationEstado(db, conversation.id, "intervencion_humana", {
       motivoAtencion: "La clienta mandó un audio, foto o archivo sin texto",
@@ -55,7 +60,6 @@ export async function procesarMensajeEntrante(
     return
   }
 
-  const { modo } = await getAjustesIa(db)
   if (modo !== "apagado") {
     await procesarConIa(db, {
       modo,
@@ -67,6 +71,7 @@ export async function procesarMensajeEntrante(
     return
   }
 
+  if (!msg.contenido) return
   const resultado = await clasificarYResponder(db, msg.contenido)
 
   if (resultado.clasificacion === "reclamo") {

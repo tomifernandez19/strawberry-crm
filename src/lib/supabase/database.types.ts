@@ -159,6 +159,7 @@ export interface Database {
           tipo_contenido: "texto" | "imagen" | "audio" | "documento" | "ubicacion"
           contenido: string | null
           media_url: string | null
+          contexto: Json | null
           canal_message_id: string | null
           ai_run_id: string | null
           enviado_at: string
