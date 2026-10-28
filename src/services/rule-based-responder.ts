@@ -59,7 +59,7 @@ export interface ResultadoClasificacion {
   respuesta: string | null // null = no auto-responder (reclamo, o desconocido sin mensaje de espera)
 }
 
-const MENSAJE_ESPERA = "Ya te averiguo y te paso en un ratito 🙂"
+export const MENSAJE_ESPERA = "Ya te averiguo y te paso en un ratito 🙂"
 
 async function buscarModeloMencionado(db: Db, textoNormalizado: string) {
   const { data: modelos } = await db.from("modelos").select("id, descripcion").eq("activo", true)
@@ -194,7 +194,13 @@ export async function guardarRespuestaAprendida(
 
 export async function programarRespuesta(
   db: Db,
-  params: { conversationId: string; conversationMessageId: string; contenido: string; clasificacion: Exclude<Clasificacion, "reclamo"> }
+  params: {
+    conversationId: string
+    conversationMessageId: string
+    contenido: string
+    clasificacion: Exclude<Clasificacion, "reclamo"> | "ia"
+    fotos?: string[]
+  }
 ) {
   const enviarEn = new Date(Date.now() + 2 * 60 * 1000).toISOString()
   const { error } = await db.schema("atencion").from("respuestas_programadas").insert({
@@ -202,6 +208,7 @@ export async function programarRespuesta(
     conversation_message_id: params.conversationMessageId,
     contenido: params.contenido,
     clasificacion: params.clasificacion,
+    fotos: params.fotos ?? [],
     enviar_en: enviarEn,
   })
   if (error) throw error

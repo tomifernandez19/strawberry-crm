@@ -3,6 +3,7 @@ import Link from "next/link"
 import { createServiceClient } from "@/lib/supabase/server"
 import { listMessages } from "@/services/conversations"
 import ConversationActions from "./actions"
+import DraftPanel from "./draft-panel"
 import ReplyForm from "./reply-form"
 import styles from "../bandeja.module.css"
 
@@ -33,6 +34,16 @@ export default async function ConversationDetailPage({
 
   const messages = await listMessages(db, id)
 
+  const { data: borrador } = await db
+    .schema("atencion")
+    .from("borradores_ia")
+    .select("id, contenido, fotos")
+    .eq("conversation_id", id)
+    .eq("estado", "pendiente")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
   return (
     <div>
       <Link href="/bandeja" className={styles.backLink}>
@@ -53,13 +64,21 @@ export default async function ConversationDetailPage({
         {messages.length === 0 && <p style={{ color: "#8b7a7e" }}>Sin mensajes todavía.</p>}
         {messages.map((m) => (
           <div key={m.id} className={`${styles.bubble} ${styles[m.emisor]}`}>
-            <div>{m.contenido}</div>
+            {m.media_url && m.tipo_contenido === "imagen" && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={m.media_url} alt="Imagen" style={{ maxWidth: "100%", borderRadius: 8, marginBottom: 4 }} />
+            )}
+            {m.contenido && <div>{m.contenido}</div>}
             <div className={styles.bubbleMeta}>
               {EMISOR_LABEL[m.emisor]} · {new Date(m.enviado_at).toLocaleString("es-AR")}
             </div>
           </div>
         ))}
       </div>
+
+      {borrador && (
+        <DraftPanel key={borrador.id} borradorId={borrador.id} contenido={borrador.contenido} fotos={borrador.fotos} />
+      )}
 
       <ReplyForm conversationId={conversation.id} />
     </div>

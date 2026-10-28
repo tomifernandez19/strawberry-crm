@@ -141,7 +141,9 @@ export const instagramAdapter: ChannelAdapter = {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         recipient: { id: message.canalThreadId },
-        message: { text: message.contenido },
+        message: message.mediaUrl
+          ? { attachment: { type: "image", payload: { url: message.mediaUrl } } }
+          : { text: message.contenido },
       }),
     })
 

@@ -3,7 +3,8 @@ import type { Database } from "@/lib/supabase/database.types"
 import type { EchoMessage, InboundMessage } from "./channels/types"
 import { findOrCreateCustomer } from "./customers"
 import { appendMessage, getOrCreateConversation, setConversationEstado } from "./conversations"
-import { clasificarYResponder, programarRespuesta } from "./rule-based-responder"
+import { getAjustesIa, responderConsulta, type ModoIa } from "./ai-agent"
+import { clasificarYResponder, MENSAJE_ESPERA, programarRespuesta } from "./rule-based-responder"
 
 type Db = SupabaseClient<Database>
 
@@ -52,6 +53,18 @@ export async function procesarMensajeEntrante(
     return
   }
 
+  const { modo } = await getAjustesIa(db)
+  if (modo !== "apagado") {
+    await procesarConIa(db, {
+      modo,
+      conversation,
+      mensajeId: mensajeGuardado.id,
+      nombreCliente: customer.nombre,
+      esPrimerMensaje,
+    })
+    return
+  }
+
   const resultado = await clasificarYResponder(db, msg.contenido)
 
   if (resultado.clasificacion === "reclamo") {
@@ -88,6 +101,83 @@ export async function procesarMensajeEntrante(
       clasificacion: resultado.clasificacion,
     })
   }
+}
+
+// Camino con Claude (Fase 10). "sombra": deja un borrador en la bandeja para
+// que una persona lo apruebe, no manda nada solo. "auto": programa el envío
+// como las respuestas por reglas. Ante cualquier duda o error, la
+// conversación queda para una persona — nunca se manda algo a ciegas.
+async function procesarConIa(
+  db: Db,
+  params: {
+    modo: Exclude<ModoIa, "apagado">
+    conversation: { id: string; estado: string }
+    mensajeId: string
+    nombreCliente: string | null
+    esPrimerMensaje: boolean
+  }
+): Promise<void> {
+  const { conversation } = params
+
+  // Ya está marcada para una persona y nadie la atendió todavía: la IA no
+  // se mete ni gasta.
+  if (conversation.estado === "intervencion_humana") return
+
+  let resultado
+  try {
+    resultado = await responderConsulta(db, {
+      conversationId: conversation.id,
+      mensajeId: params.mensajeId,
+      nombreCliente: params.nombreCliente,
+      esPrimerMensaje: params.esPrimerMensaje,
+    })
+  } catch (err) {
+    console.error("Falló el agente de IA:", err)
+    await setConversationEstado(db, conversation.id, "intervencion_humana")
+    return
+  }
+
+  if (resultado.accion === "sin_respuesta") return
+
+  if (resultado.accion === "derivar") {
+    await setConversationEstado(db, conversation.id, "intervencion_humana")
+    if (params.modo === "auto" && resultado.motivo !== "equipo_atendiendo") {
+      await programarRespuesta(db, {
+        conversationId: conversation.id,
+        conversationMessageId: params.mensajeId,
+        contenido: MENSAJE_ESPERA,
+        clasificacion: "desconocido",
+      })
+    }
+    return
+  }
+
+  if (params.modo === "auto") {
+    await programarRespuesta(db, {
+      conversationId: conversation.id,
+      conversationMessageId: params.mensajeId,
+      contenido: resultado.mensaje,
+      clasificacion: "ia",
+      fotos: resultado.fotos,
+    })
+    return
+  }
+
+  // Un mensaje nuevo de la clienta deja viejo el borrador anterior.
+  await db
+    .schema("atencion")
+    .from("borradores_ia")
+    .update({ estado: "descartado", resuelto_at: new Date().toISOString() })
+    .eq("conversation_id", conversation.id)
+    .eq("estado", "pendiente")
+  await db.schema("atencion").from("borradores_ia").insert({
+    conversation_id: conversation.id,
+    conversation_message_id: params.mensajeId,
+    ai_run_id: resultado.aiRunId,
+    contenido: resultado.mensaje,
+    fotos: resultado.fotos,
+  })
+  await setConversationEstado(db, conversation.id, "requiere_aprobacion")
 }
 
 // Cuando alguien responde un DM desde la app del canal directamente (no

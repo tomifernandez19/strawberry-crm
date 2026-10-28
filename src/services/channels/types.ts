@@ -14,9 +14,12 @@ export interface InboundMessage {
   timestamp: string
 }
 
+// Un mensaje saliente es texto o una imagen (por URL pública), nunca los dos
+// a la vez — los canales los mandan como mensajes separados.
 export interface OutboundMessage {
   canalThreadId: string
-  contenido: string
+  contenido?: string
+  mediaUrl?: string
 }
 
 // Cuando alguien responde desde la app del canal directamente (no desde

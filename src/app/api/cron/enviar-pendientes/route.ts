@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/server"
-import { getChannelAdapter } from "@/services/channels/registry"
-import { appendMessage } from "@/services/conversations"
-import type { Canal } from "@/services/channels/types"
+import { enviarRespuesta } from "@/services/outbound"
 
 // Lo llama pg_cron (Supabase) cada un minuto vía pg_net — no Vercel Cron,
 // que en el plan gratuito no deja frecuencia de 1 minuto. Todo el trabajo
@@ -19,7 +17,7 @@ export async function POST(request: Request) {
   const { data: pendientes, error } = await db
     .schema("atencion")
     .from("respuestas_programadas")
-    .select("id, conversation_id, contenido")
+    .select("id, conversation_id, contenido, fotos")
     .eq("enviado", false)
     .lte("enviar_en", new Date().toISOString())
 
@@ -30,26 +28,11 @@ export async function POST(request: Request) {
 
   for (const pendiente of pendientes ?? []) {
     try {
-      const { data: conversation } = await db
-        .schema("atencion")
-        .from("conversations")
-        .select("canal, canal_thread_id")
-        .eq("id", pendiente.conversation_id)
-        .single()
-      if (!conversation) throw new Error("Conversación no encontrada")
-
-      const adapter = getChannelAdapter(conversation.canal as Canal)
-      const envio = await adapter.sendMessage({
-        canalThreadId: conversation.canal_thread_id ?? "",
+      await enviarRespuesta(db, {
+        conversationId: pendiente.conversation_id,
         contenido: pendiente.contenido,
-      })
-
-      await appendMessage(db, {
-        conversation_id: pendiente.conversation_id,
+        fotos: pendiente.fotos,
         emisor: "ia",
-        contenido: pendiente.contenido,
-        tipo_contenido: "texto",
-        canal_message_id: envio.canalMessageId ?? null,
       })
 
       await db

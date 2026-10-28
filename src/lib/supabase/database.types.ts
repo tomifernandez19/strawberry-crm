@@ -63,9 +63,20 @@ export interface Database {
           talle_especifico: string | null
           ubicacion: string | null
           en_vidriera: boolean | null
+          sucursal_id: string | null
         }
         Insert: Partial<Database["public"]["Tables"]["unidades"]["Row"]>
         Update: Partial<Database["public"]["Tables"]["unidades"]["Row"]>
+        Relationships: []
+      }
+      sucursales: {
+        Row: {
+          id: string
+          nombre: string
+          created_at: string | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["sucursales"]["Row"]> & { nombre: string }
+        Update: Partial<Database["public"]["Tables"]["sucursales"]["Row"]>
         Relationships: []
       }
       profiles: {
@@ -320,9 +331,10 @@ export interface Database {
           conversation_id: string
           conversation_message_id: string | null
           contenido: string
-          clasificacion: "precio" | "stock" | "faq" | "aprendida" | "desconocido"
+          clasificacion: "precio" | "stock" | "faq" | "aprendida" | "desconocido" | "ia"
           enviar_en: string
           enviado: boolean
+          fotos: string[]
           created_at: string
         }
         Insert: Partial<Database["atencion"]["Tables"]["respuestas_programadas"]["Row"]> & {
@@ -332,6 +344,36 @@ export interface Database {
           enviar_en: string
         }
         Update: Partial<Database["atencion"]["Tables"]["respuestas_programadas"]["Row"]>
+        Relationships: []
+      }
+      ajustes: {
+        Row: {
+          clave: string
+          valor: Json
+          updated_at: string
+        }
+        Insert: Partial<Database["atencion"]["Tables"]["ajustes"]["Row"]> & { clave: string; valor: Json }
+        Update: Partial<Database["atencion"]["Tables"]["ajustes"]["Row"]>
+        Relationships: []
+      }
+      borradores_ia: {
+        Row: {
+          id: string
+          conversation_id: string
+          conversation_message_id: string | null
+          ai_run_id: string | null
+          contenido: string
+          fotos: string[]
+          estado: "pendiente" | "enviado" | "descartado"
+          created_at: string
+          resuelto_at: string | null
+          resuelto_por: string | null
+        }
+        Insert: Partial<Database["atencion"]["Tables"]["borradores_ia"]["Row"]> & {
+          conversation_id: string
+          contenido: string
+        }
+        Update: Partial<Database["atencion"]["Tables"]["borradores_ia"]["Row"]>
         Relationships: []
       }
     }

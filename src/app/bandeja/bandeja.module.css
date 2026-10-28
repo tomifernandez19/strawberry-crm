@@ -251,3 +251,72 @@
   color: #5e4f53;
   cursor: pointer;
 }
+
+.draftPanel {
+  margin-top: 16px;
+  padding: 14px;
+  background: #fbf0df;
+  border: 1px solid #ecd5aa;
+  border-radius: 10px;
+}
+
+.draftTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #a66a1e;
+  margin-bottom: 8px;
+}
+
+.draftPanel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px solid #e2d5d3;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  background: #fff;
+}
+
+.draftFotos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: #8b7a7e;
+}
+
+.draftFotos img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.draftActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.draftActions button {
+  border: none;
+  background: #8c2b4a;
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.draftActions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.draftActions .draftDescartar {
+  background: #fff;
+  color: #5e4f53;
+  border: 1px solid #e2d5d3;
+}
