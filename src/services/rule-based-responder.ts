@@ -118,12 +118,14 @@ export async function clasificarYResponder(db: Db, mensaje: string): Promise<Res
         .limit(1)
         .maybeSingle()
       if (variante) {
-        // precio_lista = hasta 3 cuotas sin interés; precio_efectivo =
-        // efectivo/transferencia. El precio mayorista (más de una unidad)
-        // queda afuera por ahora, a pedido del negocio.
+        // Precio de referencia = lista (hasta 3 cuotas sin interés). En
+        // efectivo/transferencia hay 15% de descuento sobre la lista. El
+        // precio mayorista queda afuera por ahora, a pedido del negocio.
         const partes: string[] = []
-        if (variante.precio_efectivo) partes.push(`$${variante.precio_efectivo} en efectivo/transferencia`)
-        if (variante.precio_lista) partes.push(`$${variante.precio_lista} en hasta 3 cuotas sin interés`)
+        if (variante.precio_lista) {
+          partes.push(`$${variante.precio_lista} en hasta 3 cuotas sin interés`)
+          partes.push(`$${Math.round(variante.precio_lista * 0.85)} en efectivo/transferencia (15% de descuento)`)
+        }
 
         if (partes.length > 0) {
           return {

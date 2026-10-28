@@ -66,6 +66,14 @@ function singular(palabra: string): string {
   return palabra
 }
 
+// El precio de referencia es siempre el de lista; pagando en efectivo o
+// transferencia hay 15% de descuento (dato del negocio). Se calcula acá para
+// que el modelo nunca haga la cuenta.
+export const DESCUENTO_CONTADO = 0.15
+function precioContado(precioLista: number | null): number | null {
+  return precioLista ? Math.round(precioLista * (1 - DESCUENTO_CONTADO)) : null
+}
+
 function tokens(texto: string): string[] {
   return normalizar(texto)
     .split(/[^a-z0-9]+/)
@@ -208,8 +216,8 @@ async function buscarProductos(
         return {
           color: v.color,
           talles_con_stock: Object.fromEntries(talles.map(([t, suc]) => [t, [...suc].sort()])),
-          precio_efectivo_transferencia: v.precio_efectivo,
           precio_lista_hasta_3_cuotas_sin_interes: v.precio_lista,
+          precio_efectivo_o_transferencia_con_15_por_ciento_off: precioContado(v.precio_lista),
           cantidad_talles: talles.length,
         }
       })
@@ -301,8 +309,8 @@ REGLAS DE DATOS
 - Si no hay stock del talle o color pedido, decilo con claridad y ofrecé solo alternativas reales que muestren los datos.
 - Solo afirmes que algo "no hay" cuando identificaste con certeza el modelo. Si la clienta lo describe vagamente (ej. "la chocolate con hebilla") y no podés estar segura de cuál es, preguntale el nombre del modelo o mandale fotos de candidatos; no digas que no hay stock.
 - Podés decir en qué sucursal está disponible un talle. En los datos las sucursales figuran como "Trejo" (Obispo Trejo 468, Nueva Córdoba) y "Villa Allende" (Lisboa 22, complejo Cuadra 1). Una clienta que quiere ir a probarse puede pasar por esa sucursal.
-- Informá los precios exactos que devuelve la herramienta. No calcules ni menciones porcentajes de descuento: los montos de la herramienta son los que valen.
-- Al informar un precio, pasá los dos: el precio en efectivo/transferencia y el de lista en hasta 3 cuotas sin interés. Formato $72.000. No menciones precios mayoristas.
+- Usá los montos exactamente como los devuelve la herramienta; no hagas cuentas vos.
+- El precio que siempre informás es el de lista (en hasta 3 cuotas sin interés). Agregá que pagando en efectivo o transferencia hay 15% de descuento y el monto que ya calcula la herramienta. Formato $72.000. No menciones precios mayoristas.
 - Fotos: si piden ver el producto, usá obtener_fotos y poné en "fotos" solo URLs que esa herramienta te devolvió (máximo 3).
 
 CONVERSACIÓN
