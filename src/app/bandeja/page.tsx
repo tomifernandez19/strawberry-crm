@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { createServiceClient } from "@/lib/supabase/server"
 import { listConversations } from "@/services/conversations"
+import CerrarButton from "./cerrar-button"
 import styles from "./bandeja.module.css"
 
 const CANAL_LABEL: Record<string, string> = {
@@ -78,6 +79,7 @@ export default async function BandejaPage({ searchParams }: { searchParams: Prom
               <th>Estado</th>
               <th>Motivo</th>
               <th>Última interacción</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -94,6 +96,7 @@ export default async function BandejaPage({ searchParams }: { searchParams: Prom
                   </td>
                   <td className={styles.motivo}>{REQUIERE_ATENCION.has(c.estado) ? (c.motivo_atencion ?? "") : ""}</td>
                   <td>{new Date(c.ultima_interaccion_at).toLocaleString("es-AR")}</td>
+                  <td>{c.estado !== "cerrada" && <CerrarButton conversationId={c.id} />}</td>
                 </tr>
               )
             })}

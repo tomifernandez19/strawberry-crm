@@ -396,3 +396,17 @@
   border-color: #8c2b4a;
   color: #fff;
 }
+
+.botonCerrar {
+  border: 1px solid #e2d5d3;
+  background: #fff;
+  color: #5e4f53;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.botonCerrar:hover {
+  background: #f1e9e8;
+}

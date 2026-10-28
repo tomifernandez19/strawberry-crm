@@ -38,6 +38,16 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/conversati
   const body = await request.json()
   const db = createServiceClient()
 
+  // Cerrar una conversación descarta el borrador de la IA que haya quedado pendiente.
+  if (body.estado === "cerrada") {
+    await db
+      .schema("atencion")
+      .from("borradores_ia")
+      .update({ estado: "descartado", resuelto_at: new Date().toISOString(), resuelto_por: profile.id })
+      .eq("conversation_id", id)
+      .eq("estado", "pendiente")
+  }
+
   const updated = await setConversationEstado(db, id, body.estado, {
     asignadoA: body.estado === "intervencion_humana" ? profile.id : body.asignadoA,
   })
