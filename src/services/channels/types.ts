@@ -12,7 +12,7 @@ export interface InboundMessage {
   contenido?: string
   mediaUrl?: string
   // Contexto del mensaje: p. ej. la historia nuestra a la que respondió la clienta.
-  contexto?: { historia?: { url: string; id?: string } }
+  contexto?: { historia?: { url: string; id?: string }; respuestaA?: unknown }
   timestamp: string
 }
 

@@ -88,7 +88,10 @@ function parseMessagingEvent(evento: {
       mediaUrl: attachment?.payload.url,
       contexto: evento.message.reply_to?.story?.url
         ? { historia: { url: evento.message.reply_to.story.url, id: evento.message.reply_to.story.id } }
-        : undefined,
+        : // Si trae "reply_to" pero con otro formato, se guarda crudo para poder ajustar el parser.
+          evento.message.reply_to
+          ? { respuestaA: evento.message.reply_to }
+          : undefined,
       timestamp: new Date(evento.timestamp).toISOString(),
     },
   }
