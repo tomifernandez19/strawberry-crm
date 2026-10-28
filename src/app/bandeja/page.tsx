@@ -68,7 +68,7 @@ export default async function BandejaPage() {
               return (
                 <tr key={c.id} className={REQUIERE_ATENCION.has(c.estado) ? styles.filaAtencion : undefined}>
                   <td>
-                    <Link href={`/bandeja/${c.id}`}>{CANAL_LABEL[c.canal] ?? c.canal}</Link>
+                    <Link href={`/bandeja/${c.id}`} prefetch={false}>{CANAL_LABEL[c.canal] ?? c.canal}</Link>
                   </td>
                   <td>{customer?.nombre ?? customer?.telefono ?? "—"}</td>
                   <td>
