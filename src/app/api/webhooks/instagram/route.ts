@@ -1,6 +1,11 @@
+import { after } from "next/server"
 import { createServiceClient } from "@/lib/supabase/server"
 import { fetchInstagramProfile, instagramAdapter, verifyInstagramSignature } from "@/services/channels/instagram"
 import { procesarEcoSaliente, procesarMensajeEntrante } from "@/services/inbound-message-handler"
+
+// El agente de IA puede tardar 10–15 s: se responde 200 enseguida (Meta
+// reintenta y duplica si tarda) y el trabajo sigue en segundo plano.
+export const maxDuration = 60
 
 // Handshake de verificación: Meta lo llama una vez al configurar el webhook.
 export async function GET(request: Request) {
@@ -15,8 +20,8 @@ export async function GET(request: Request) {
   return new Response(challenge, { status: 200 })
 }
 
-// Mensajes entrantes reales. Clasificación por reglas sin IA (gratis) —
-// ver rule-based-responder.ts. El agente de Claude de verdad es Fase 10.
+// Mensajes entrantes reales. Los procesa inbound-message-handler.ts (IA o
+// reglas, según el modo en atencion.ajustes).
 export async function POST(request: Request) {
   const rawBody = await request.text()
 
@@ -33,16 +38,26 @@ export async function POST(request: Request) {
     console.log("Webhook de Instagram sin nada parseado. Payload crudo:", rawBody)
   }
 
-  const db = createServiceClient()
+  after(async () => {
+    const db = createServiceClient()
 
-  for (const msg of mensajes) {
-    const perfil = await fetchInstagramProfile(msg.clienteIdentidad.psid!)
-    await procesarMensajeEntrante(db, msg, perfil.nombre)
-  }
+    for (const msg of mensajes) {
+      try {
+        const perfil = await fetchInstagramProfile(msg.clienteIdentidad.psid!)
+        await procesarMensajeEntrante(db, msg, perfil.nombre)
+      } catch (err) {
+        console.error("Error procesando mensaje entrante de Instagram:", err)
+      }
+    }
 
-  for (const eco of ecos) {
-    await procesarEcoSaliente(db, eco)
-  }
+    for (const eco of ecos) {
+      try {
+        await procesarEcoSaliente(db, eco)
+      } catch (err) {
+        console.error("Error procesando eco de Instagram:", err)
+      }
+    }
+  })
 
   // Meta reintenta si no devolvemos 200 rápido.
   return new Response("EVENT_RECEIVED", { status: 200 })

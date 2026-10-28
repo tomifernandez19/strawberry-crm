@@ -3,7 +3,7 @@ import type { Database } from "@/lib/supabase/database.types"
 import type { EchoMessage, InboundMessage } from "./channels/types"
 import { findOrCreateCustomer } from "./customers"
 import { appendMessage, getOrCreateConversation, setConversationEstado } from "./conversations"
-import { getAjustesIa, responderConsulta, type ModoIa } from "./ai-agent"
+import { getAjustesIa, MODELO_IA, responderConsulta, type ModoIa } from "./ai-agent"
 import { clasificarYResponder, MENSAJE_ESPERA, programarRespuesta } from "./rule-based-responder"
 
 type Db = SupabaseClient<Database>
@@ -133,6 +133,15 @@ async function procesarConIa(
     })
   } catch (err) {
     console.error("Falló el agente de IA:", err)
+    // Queda registrado en ai_runs para poder ver qué falló sin depender de los logs.
+    await db.schema("atencion").from("ai_runs").insert({
+      tipo: "respuesta_conversacion",
+      conversation_message_id: params.mensajeId,
+      intencion_clasificada: "error",
+      nivel_confianza: 3,
+      respuesta_generada: (err instanceof Error ? err.message : String(err)).slice(0, 500),
+      modelo_ia: MODELO_IA,
+    })
     await setConversationEstado(db, conversation.id, "intervencion_humana")
     return
   }
