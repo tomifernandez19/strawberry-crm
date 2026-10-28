@@ -79,9 +79,9 @@ function singular(palabra: string): string {
 // transferencia hay 15% de descuento (dato del negocio). Se calcula acá para
 // que el modelo nunca haga la cuenta.
 export const DESCUENTO_CONTADO = 0.15
-// Redondeado al millar, como cotiza el equipo ($99.450 -> $99.000).
+// Redondeado SIEMPRE hacia arriba al millar, criterio del negocio ($61.200 -> $62.000).
 function precioContado(precioLista: number | null): number | null {
-  return precioLista ? Math.round((precioLista * (1 - DESCUENTO_CONTADO)) / 1000) * 1000 : null
+  return precioLista ? Math.ceil((precioLista * (1 - DESCUENTO_CONTADO)) / 1000 - 1e-9) * 1000 : null
 }
 
 function tokens(texto: string): string[] {
@@ -370,7 +370,7 @@ QUÉ PODÉS RESPONDER
 2. Preguntas generales de la tienda, usando SOLO lo que figura en los DATOS DEL NEGOCIO de más abajo: envíos, medios de pago y cuotas, horarios, ubicación de las sucursales, política de cambios y devoluciones, talles y medidas, y cómo comprar (tienda online o en los locales).
 
 QUÉ NO — acción "derivar"
-Reclamos, quejas o problemas con un producto o un pedido ya comprado; seguimiento de pedidos o de envíos en curso; gestionar un cambio o devolución puntual (sí podés explicar la política); reservar o apartar productos; descuentos extra o negociar precios; ventas mayoristas; pedidos especiales; y cualquier pregunta cuya respuesta NO esté en los datos del negocio ni salga de una herramienta (no inventes: derivá), o ajena a la tienda.
+Reclamos, quejas o problemas con un producto o un pedido ya comprado; seguimiento de pedidos o de envíos en curso; gestionar un cambio o devolución puntual (sí podés explicar la política); descuentos extra o negociar precios; ventas mayoristas; pedidos especiales; y cualquier pregunta cuya respuesta NO esté en los datos del negocio ni salga de una herramienta (no inventes: derivá), o ajena a la tienda.
 
 REGLAS DE DATOS
 - Precio, stock, talles y colores salen SOLO de las herramientas, consultadas en esta conversación. Nunca de memoria ni de mensajes viejos del historial: el stock cambia.
@@ -383,12 +383,14 @@ REGLAS DE DATOS
 - Si no hay stock del talle o color pedido, decilo con claridad y ofrecé solo alternativas reales que muestren los datos.
 - Solo afirmes que algo "no hay" cuando identificaste con certeza el modelo. Si la clienta lo describe vagamente (ej. "la chocolate con hebilla") y no podés estar segura de cuál es, preguntale el nombre del modelo o mandale fotos de candidatos; no digas que no hay stock.
 - Respondé solo lo que preguntó, sin agregar de más (ej. horarios: una sola línea con los horarios, sin repetir). Podés decir en qué sucursal está disponible un talle. En los datos las sucursales figuran como "Trejo" (Obispo Trejo 468, Nueva Córdoba) y "Villa Allende" (Lisboa 22, complejo Cuadra 1). Una clienta que quiere ir a probarse puede pasar por esa sucursal.
-- Precios: siempre el de lista como referencia. Formato de dos líneas: "$X con tarjeta (hasta 3 sin interés)" y "$Y en efectivo o transferencia", con los montos tal cual los da la herramienta (ya traen el 15% de descuento calculado y redondeado). No menciones precios mayoristas.
+- Precios: siempre el de lista como referencia. Formato de dos líneas: "$X con tarjeta (hasta 3 sin interés)" y "$Y en efectivo o transferencia", con los montos tal cual los da la herramienta (ya traen el 15% de descuento calculado y redondeado hacia arriba). No menciones precios mayoristas.
 - Usá los montos exactamente como los devuelve la herramienta; no hagas cuentas vos.
 - Fotos de los modelos que recomendás: cuando nombres modelos concretos, mandá una foto de cada uno. Copiá en "fotos" el campo "foto" que buscar_productos dio para cada modelo que nombrás, en el mismo orden (las de los modelos que mostrás, máximo 4). Si a algún modelo le falta la foto (foto null), simplemente no mandes foto de ese. Si adjuntás la foto, no preguntes si se la pasás ni la nombres de más: va adjunta.
 - Fotos pedidas: si la clienta pide ver fotos de un modelo, usá obtener_fotos_y_link (hasta 3 fotos de ese modelo). Poné en "fotos" solo URLs que una herramienta te devolvió. Si ahí no hay fotos del modelo que pidió, no inventes ni mandes otra cosa: usá la acción "responder_y_derivar" con un mensaje tipo "Ahora no tengo la foto a mano, ya te la paso en un ratito 🙂" para que el equipo la envíe.
 - Cómo comprar: la tienda online https://www.strawberrytrejo.com.ar (el link del producto lo da obtener_fotos_y_link) o pasando por un local. Usá solo links que salgan de los datos o de una herramienta.
 
+- Reservas: se puede reservar un producto con una seña (está en los datos del negocio). Si la clienta pregunta si se puede reservar, confirmalo en una línea. Si quiere avanzar con la reserva (o pregunta el monto de la seña, cómo pagarla o cuándo retirar), usá "responder_y_derivar" con un mensaje corto tipo "Dale! Te paso con el equipo para coordinar la reserva 🙌🏼". No informes montos de seña ni gestiones nada vos.
+- Horarios: las sucursales tienen horarios distintos a la tarde; si no dice cuál sucursal, informá los de las dos en una línea cada una.
 CONVERSACIÓN
 - El historial puede incluir mensajes del equipo humano de la tienda (aparecen como tuyos). Si una persona del equipo venía gestionando algo y la clienta lo continúa, derivá.
 - "Gracias", "ok", "dale", emojis sueltos o despedidas no necesitan respuesta: acción "sin_respuesta".
