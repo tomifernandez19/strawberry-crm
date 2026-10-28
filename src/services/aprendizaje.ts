@@ -124,18 +124,22 @@ async function transcripcion(db: Db, conversationId: string): Promise<{ texto: s
   const { data } = await db
     .schema("atencion")
     .from("conversation_messages")
-    .select("emisor, contenido, tipo_contenido")
+    .select("emisor, contenido, tipo_contenido, autor_id, ai_run_id")
     .eq("conversation_id", conversationId)
     .order("enviado_at", { ascending: true })
   const lineas: string[] = []
   const deEquipo: string[] = []
   let hayEquipo = false
   for (const m of data ?? []) {
-    // Las respuestas de la IA y del sistema no se aprenden: solo personas.
-    if (m.emisor !== "cliente" && m.emisor !== "humano") continue
+    // Se aprende de lo que dijo una persona del equipo, o de un borrador de la
+    // IA que una persona APROBÓ y envió (autor_id = quien lo envió; si lo editó,
+    // el texto guardado es la versión final). Nunca de los borradores
+    // descartados (no llegan a ser mensajes) ni de envíos automáticos.
+    const borradorEnviado = m.emisor === "ia" && m.autor_id !== null && m.ai_run_id !== null
+    if (m.emisor !== "cliente" && m.emisor !== "humano" && !borradorEnviado) continue
     const texto = m.contenido?.trim() || (m.tipo_contenido === "imagen" ? "[foto]" : "")
     if (!texto) continue
-    if (m.emisor === "humano") {
+    if (m.emisor !== "cliente") {
       hayEquipo = true
       deEquipo.push(texto)
     }
