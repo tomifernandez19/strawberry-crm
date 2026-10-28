@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/renovar-instagram", "schedule": "0 12 * * *" },
-    { "path": "/api/cron/cerrar-inactivas", "schedule": "0 7 * * *" }
+    { "path": "/api/cron/cerrar-inactivas", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/aprender", "schedule": "0 8 * * *" }
   ]
 }

@@ -348,6 +348,28 @@ export interface Database {
         Update: Partial<Database["atencion"]["Tables"]["respuestas_programadas"]["Row"]>
         Relationships: []
       }
+      conocimiento: {
+        Row: {
+          id: string
+          tipo: "politica" | "producto" | "estilo" | "otro"
+          tema: string
+          modelo: string | null
+          pregunta: string
+          respuesta: string
+          veces_visto: number
+          activo: boolean
+          conversation_id: string | null
+          created_at: string
+        }
+        Insert: Partial<Database["atencion"]["Tables"]["conocimiento"]["Row"]> & {
+          tipo: "politica" | "producto" | "estilo" | "otro"
+          tema: string
+          pregunta: string
+          respuesta: string
+        }
+        Update: Partial<Database["atencion"]["Tables"]["conocimiento"]["Row"]>
+        Relationships: []
+      }
       fotos_producto: {
         Row: {
           modelo_id: string

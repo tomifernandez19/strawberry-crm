@@ -410,7 +410,7 @@ QUÉ PODÉS RESPONDER
 2. Preguntas generales de la tienda, usando SOLO lo que figura en los DATOS DEL NEGOCIO de más abajo: envíos, medios de pago y cuotas, horarios, ubicación de las sucursales, política de cambios y devoluciones, talles y medidas, y cómo comprar (tienda online o en los locales).
 
 QUÉ NO — acción "derivar"
-Reclamos, quejas o problemas con un producto o un pedido ya comprado; seguimiento de pedidos o de envíos en curso; gestionar un cambio o devolución puntual (sí podés explicar la política); descuentos extra o negociar precios; ventas mayoristas; pedidos especiales; y cualquier pregunta cuya respuesta NO esté en los datos del negocio ni salga de una herramienta (no inventes: derivá), o ajena a la tienda.
+Reclamos, quejas o problemas con un producto o un pedido ya comprado; seguimiento de pedidos o de envíos en curso; gestionar un cambio o devolución puntual (sí podés explicar la política); descuentos extra o negociar precios; ventas mayoristas; pedidos especiales; y cualquier pregunta cuya respuesta NO esté en los datos del negocio, ni en lo que el equipo ya respondió antes, ni salga de una herramienta (no inventes: derivá), o ajena a la tienda.
 
 REGLAS DE DATOS
 - Precio, stock, talles y colores salen SOLO de las herramientas, consultadas en esta conversación. Nunca de memoria ni de mensajes viejos del historial: el stock cambia.
@@ -457,6 +457,24 @@ const ESQUEMA_RESPUESTA = {
   },
   required: ["accion", "mensaje", "fotos", "motivo"],
   additionalProperties: false as const,
+}
+
+// "Cerebro": lo que el equipo ya respondió en conversaciones reales. Solo cosas
+// estables (nunca precio/stock/disponibilidad, que se filtran al aprender).
+async function cargarAprendido(db: Db): Promise<string> {
+  const { data } = await db
+    .schema("atencion")
+    .from("conocimiento")
+    .select("tipo, modelo, pregunta, respuesta")
+    .eq("activo", true)
+    .order("veces_visto", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(100)
+  if (!data || data.length === 0) return ""
+  const lineas = data.map((k) => `- ${k.modelo ? `[Modelo ${k.modelo}] ` : k.tipo === "estilo" ? "[Tono] " : ""}${k.pregunta} → ${k.respuesta}`)
+  return `LO QUE EL EQUIPO YA RESPONDIÓ ANTES (aprendido de conversaciones reales; orientativo)
+Sirve para el tono y para consultas que no cubren los datos del negocio. Mandan siempre los DATOS DEL NEGOCIO y las herramientas. NUNCA lo uses para precios, stock, talles ni disponibilidad: eso se consulta siempre en vivo. Si una entrada nombra un modelo, aplicala solo a ese modelo.
+${lineas.join("\n")}`
 }
 
 async function cargarInfoNegocio(db: Db): Promise<string> {
@@ -620,6 +638,7 @@ export async function responderConsulta(
     }
   }
 
+  const aprendido = await cargarAprendido(db)
   const infoNegocio = await cargarInfoNegocio(db)
   const contexto =
     `DATOS DEL NEGOCIO\n${infoNegocio}\n\n` +
@@ -641,6 +660,7 @@ export async function responderConsulta(
       max_tokens: MAX_TOKENS_RESPUESTA,
       system: [
         { type: "text", text: SYSTEM_BASE, cache_control: { type: "ephemeral" } },
+        ...(aprendido ? [{ type: "text" as const, text: aprendido, cache_control: { type: "ephemeral" as const } }] : []),
         { type: "text", text: contexto },
       ],
       tools: TOOLS,

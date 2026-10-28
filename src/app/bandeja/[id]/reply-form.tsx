@@ -7,7 +7,6 @@ import styles from "../bandeja.module.css"
 export default function ReplyForm({ conversationId }: { conversationId: string }) {
   const router = useRouter()
   const [contenido, setContenido] = useState("")
-  const [guardarComoAprendida, setGuardarComoAprendida] = useState(false)
   const [loading, setLoading] = useState(false)
   const [envioError, setEnvioError] = useState<string | null>(null)
 
@@ -20,13 +19,12 @@ export default function ReplyForm({ conversationId }: { conversationId: string }
     const res = await fetch(`/api/conversations/${conversationId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contenido, guardarComoAprendida }),
+      body: JSON.stringify({ contenido }),
     })
     const data = await res.json()
     if (data.envioError) setEnvioError(data.envioError)
 
     setContenido("")
-    setGuardarComoAprendida(false)
     setLoading(false)
     router.refresh()
   }
@@ -54,14 +52,6 @@ export default function ReplyForm({ conversationId }: { conversationId: string }
           Enviar
         </button>
       </form>
-      <label className={styles.guardarAprendidaLabel}>
-        <input
-          type="checkbox"
-          checked={guardarComoAprendida}
-          onChange={(e) => setGuardarComoAprendida(e.target.checked)}
-        />
-        Guardar esta respuesta para preguntas parecidas en el futuro
-      </label>
     </div>
   )
 }
