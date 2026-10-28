@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/supabase/database.types"
 import { listMessages } from "./conversations"
 import { fetchFotosYLink } from "./tienda-nube"
+import { extraerCuadros } from "./video-frames"
 
 type Db = SupabaseClient<Database>
 
@@ -430,7 +431,7 @@ REGLAS DE DATOS
 
 - Reservas: se puede reservar un producto con una seña a partir de $10.000 (está en los datos del negocio). Si la clienta pregunta si se puede reservar, confirmalo en una línea con ese monto. Si quiere avanzar con la reserva (o pregunta cómo pagar la seña o cuándo retirar), usá "responder_y_derivar" con un mensaje corto tipo "Dale! Te paso con el equipo para coordinar la reserva 🙌🏼". No gestiones nada más vos.
 - Horarios: las sucursales tienen horarios distintos a la tarde; si no dice cuál sucursal, informá los de las dos en una línea cada una.
-- Imágenes: si la clienta respondió a una historia nuestra o mandó una foto, mirá la imagen, identificá el producto (si trae el nombre escrito, usalo) y buscalo con buscar_productos (tipo de calzado, color, nombre). Si quedan varios candidatos parecidos, compará con ver_fotos_modelos (hasta 8 por vez) y elegí el que coincide. Después respondé lo que pregunta (stock del talle, precio, etc.) sobre ESE modelo y mencionalo por su nombre para que ella confirme. Respondé SOLO si identificaste el modelo con certeza (la foto coincide claramente con uno del catálogo, o el nombre está escrito en la imagen). Si dudás entre dos o más modelos, si el producto no se ve bien, si no está en el catálogo o si la imagen no se pudo ver, no adivines ni ofrezcas opciones: usá "derivar" con el motivo "No pude identificar el producto de la historia" (o "de la foto"); el equipo lo resuelve.
+- Imágenes: si la clienta respondió a una historia nuestra o mandó una foto, mirá la imagen (si es un video, ves 3 cuadros y podés leer el texto que se escribió encima), identificá el producto (si trae el nombre escrito, usalo) y buscalo con buscar_productos (tipo de calzado, color, nombre). Si quedan varios candidatos parecidos, compará con ver_fotos_modelos (hasta 8 por vez) y elegí el que coincide. Después respondé lo que pregunta (stock del talle, precio, etc.) sobre ESE modelo y mencionalo por su nombre para que ella confirme. Respondé SOLO si identificaste el modelo con certeza (la foto coincide claramente con uno del catálogo, o el nombre está escrito en la imagen). Si el nombre escrito coincide con varias versiones del mismo modelo (por ejemplo, distinto material: "Toronto Ecocuero" y "Toronto Gza"), no derives: mostrá todas esas versiones con su stock y precio. Si dudás entre dos o más modelos, si el producto no se ve bien, si no está en el catálogo o si la imagen no se pudo ver, no adivines ni ofrezcas opciones: usá "derivar" con el motivo "No pude identificar el producto de la historia" (o "de la foto"); el equipo lo resuelve.
 
 CONVERSACIÓN
 - El historial puede incluir mensajes del equipo humano de la tienda (aparecen como tuyos). Si una persona del equipo venía gestionando algo y la clienta lo continúa, derivá.
@@ -467,19 +468,43 @@ async function cargarInfoNegocio(db: Db): Promise<string> {
   return (data ?? []).map((k) => `- ${k.titulo}: ${k.contenido}`).join("\n")
 }
 
-// Descarga la imagen de una historia o una foto que mandó la clienta, para
-// que el modelo la vea. Si es un video, vence o no se puede bajar, devuelve null.
-async function cargarImagen(url: string): Promise<Anthropic.ImageBlockParam | null> {
+// Descarga la historia o foto que mandó la clienta, para que el modelo la vea.
+// Una imagen es 1 bloque; un video se convierte en 3 cuadros (inicio, medio y
+// final) para poder leer el texto que se escribe encima. Devuelve null si no
+// se puede (vencida, muy pesada, sin ffmpeg...), y entonces la IA deriva.
+async function cargarMedia(url: string): Promise<{ bloques: Anthropic.ImageBlockParam[]; esVideo: boolean } | null> {
+  const TIPOS_IMAGEN = ["image/jpeg", "image/png", "image/gif", "image/webp"]
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
     if (!res.ok) return null
     const tipo = (res.headers.get("content-type") ?? "").split(";")[0].trim()
-    if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(tipo)) return null
     const bytes = Buffer.from(await res.arrayBuffer())
-    if (bytes.length > 4_000_000) return null
+
+    if (TIPOS_IMAGEN.includes(tipo)) {
+      if (bytes.length > 4_000_000) return null
+      return {
+        esVideo: false,
+        bloques: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: tipo as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: bytes.toString("base64") },
+          },
+        ],
+      }
+    }
+
+    // MP4/MOV empiezan con "....ftyp"; a veces el tipo viene como octet-stream.
+    const parecidoAVideo = tipo.startsWith("video/") || bytes.subarray(4, 8).toString("latin1") === "ftyp"
+    if (!parecidoAVideo || bytes.length > 25_000_000) return null
+
+    const cuadros = await extraerCuadros(bytes, 3)
+    if (cuadros.length === 0) return null
     return {
-      type: "image",
-      source: { type: "base64", media_type: tipo as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: bytes.toString("base64") },
+      esVideo: true,
+      bloques: cuadros.map((c) => ({
+        type: "image" as const,
+        source: { type: "base64" as const, media_type: "image/jpeg" as const, data: c.toString("base64") },
+      })),
     }
   } catch {
     return null
@@ -546,19 +571,17 @@ export async function responderConsulta(
   if (conImagen) {
     const ctxMsg = conImagen.contexto as { historia?: { url?: string } } | null
     const esHistoria = Boolean(ctxMsg?.historia?.url)
-    const imagen = await cargarImagen((ctxMsg?.historia?.url ?? conImagen.media_url) as string)
+    const media = await cargarMedia((ctxMsg?.historia?.url ?? conImagen.media_url) as string)
     const ultimo = mensajes[mensajes.length - 1]
     const textoPrevio = typeof ultimo.content === "string" ? ultimo.content : ""
-    if (imagen) {
-      ultimo.content = [
-        imagen,
-        {
-          type: "text",
-          text: `${esHistoria ? "[La clienta respondió a una historia nuestra: es la imagen de arriba]" : "[La clienta mandó la imagen de arriba]"}\n${textoPrevio}`,
-        },
-      ]
+    if (media) {
+      const que = esHistoria ? "una historia nuestra" : "un mensaje suyo"
+      const rotulo = media.esVideo
+        ? `[La clienta respondió a ${que}: arriba tenés 3 cuadros del video (inicio, medio y final); leé cualquier texto escrito]`
+        : `[La clienta respondió a ${que}: es la imagen de arriba]`
+      ultimo.content = [...media.bloques, { type: "text", text: `${rotulo}\n${textoPrevio}` }]
     } else {
-      ultimo.content = `${esHistoria ? "[La clienta respondió a una historia nuestra, pero no se pudo ver la imagen (puede ser un video o haber vencido)]" : "[La clienta mandó una imagen que no se pudo ver]"}\n${textoPrevio}`
+      ultimo.content = `${esHistoria ? "[La clienta respondió a una historia nuestra, pero no se pudo ver el contenido (puede haber vencido)]" : "[La clienta mandó una imagen o video que no se pudo ver]"}\n${textoPrevio}`
     }
   }
 
