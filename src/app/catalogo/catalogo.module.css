@@ -113,3 +113,19 @@
 .filtroStock a {
   color: #8c2b4a;
 }
+
+@media (max-width: 720px) {
+  .syncBox button {
+    width: 100%;
+    padding: 14px;
+  }
+
+  .table {
+    min-width: 520px;
+  }
+
+  .tableScroll {
+    margin: 0 -14px;
+    padding: 0 14px;
+  }
+}

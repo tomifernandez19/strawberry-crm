@@ -103,3 +103,61 @@
   color: #fff;
   text-decoration: underline;
 }
+
+/* ---------- Celular ---------- */
+.nombreUsuario {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 10px 14px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+  }
+
+  .headerRight {
+    gap: 8px;
+  }
+
+  .nombreUsuario,
+  .role {
+    display: none;
+  }
+
+  /* El menú pasa abajo, como una app: al alcance del pulgar. */
+  .nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    gap: 0;
+    justify-content: space-around;
+    background: #fff;
+    border-top: 1px solid #e2d5d3;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+  }
+
+  .navLink {
+    flex: 1;
+    text-align: center;
+    padding: 12px 2px;
+    font-size: 0.8rem;
+  }
+
+  .main {
+    padding: 16px 14px calc(84px + env(safe-area-inset-bottom));
+  }
+
+  .main h1 {
+    font-size: 1.4rem;
+    margin: 0 0 12px;
+  }
+
+  .alertaConexion {
+    padding: 10px 14px;
+  }
+}

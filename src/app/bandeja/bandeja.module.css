@@ -410,3 +410,167 @@
 .botonCerrar:hover {
   background: #f1e9e8;
 }
+
+/* ---------- Celular ---------- */
+.linkFila {
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  /* La tabla se convierte en tarjetas: nombre + estado, motivo, y debajo canal, fecha y "Cerrar". */
+  .table,
+  .table tbody {
+    display: block;
+    border: none;
+    background: transparent;
+  }
+
+  .table thead {
+    display: none;
+  }
+
+  .table tr {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 6px 10px;
+    align-items: center;
+    position: relative;
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    background: #fff;
+    border: 1px solid #e2d5d3;
+    border-radius: 12px;
+  }
+
+  .table tr:hover td {
+    background: transparent;
+  }
+
+  .table td,
+  .filaAtencion td {
+    display: block;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .table tr.filaAtencion {
+    background: #fff8f6;
+    border-color: #f0c9c4;
+  }
+
+  .tdCliente {
+    grid-column: 1 / 3;
+    grid-row: 1;
+    font-size: 1.02rem;
+    font-weight: 600;
+  }
+
+  /* Toda la tarjeta se puede tocar para abrir la conversación. */
+  .linkFila::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  .tdEstado {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .tdMotivo {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    max-width: none;
+  }
+
+  .tdMotivo:empty {
+    display: none;
+  }
+
+  .tdCanal {
+    grid-column: 1;
+    grid-row: 3;
+    color: #8b7a7e;
+    font-size: 0.78rem;
+  }
+
+  .tdFecha {
+    grid-column: 2;
+    grid-row: 3;
+    color: #8b7a7e;
+    font-size: 0.78rem;
+  }
+
+  .tdAccion {
+    grid-column: 3;
+    grid-row: 3;
+    justify-self: end;
+    position: relative;
+    z-index: 2;
+  }
+
+  .botonCerrar {
+    padding: 8px 14px;
+    font-size: 0.85rem;
+  }
+
+  .vistas {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+  }
+
+  .vista {
+    white-space: nowrap;
+    padding: 9px 14px;
+  }
+
+  /* Conversación */
+  .detailHeader {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .actions button {
+    padding: 10px 14px;
+    font-size: 0.9rem;
+  }
+
+  .thread {
+    padding: 12px;
+    min-height: 120px;
+  }
+
+  .bubble {
+    max-width: 88%;
+  }
+
+  .replyForm {
+    flex-direction: column;
+  }
+
+  .replyForm textarea {
+    min-height: 88px;
+  }
+
+  .replyForm button {
+    padding: 13px 18px;
+    font-size: 1rem;
+  }
+
+  .draftPanel {
+    padding: 12px;
+  }
+
+  .draftActions {
+    flex-direction: column;
+  }
+
+  .draftActions button {
+    padding: 13px 16px;
+    font-size: 1rem;
+  }
+}

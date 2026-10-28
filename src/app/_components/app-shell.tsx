@@ -33,7 +33,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
           <NavTabs pendientes={pendientes} />
         </div>
         <div className={styles.headerRight}>
-          <span>{profile.nombre ?? profile.email}</span>
+          <span className={styles.nombreUsuario}>{profile.nombre ?? profile.email}</span>
           <span className={styles.role}>{profile.role}</span>
           <LogoutButton />
         </div>

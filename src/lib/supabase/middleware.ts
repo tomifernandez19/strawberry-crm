@@ -11,7 +11,8 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/api/webhooks") ||
     request.nextUrl.pathname.startsWith("/api/health") ||
     request.nextUrl.pathname.startsWith("/api/cron") ||
-    request.nextUrl.pathname.startsWith("/privacidad")
+    request.nextUrl.pathname.startsWith("/privacidad") ||
+    request.nextUrl.pathname === "/manifest.webmanifest"
   ) {
     return NextResponse.next({ request })
   }

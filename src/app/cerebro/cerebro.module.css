@@ -79,3 +79,14 @@
   font-size: 0.78rem;
   cursor: pointer;
 }
+
+@media (max-width: 720px) {
+  .item {
+    padding: 12px;
+  }
+
+  .boton {
+    padding: 8px 14px;
+    font-size: 0.85rem;
+  }
+}

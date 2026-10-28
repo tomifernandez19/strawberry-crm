@@ -47,3 +47,12 @@ a {
     color-scheme: dark;
   }
 }
+
+/* Celular: 16 px en los campos de texto evita que el iPhone haga zoom al tocarlos. */
+@media (max-width: 720px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

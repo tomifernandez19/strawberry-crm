@@ -87,16 +87,18 @@ export default async function BandejaPage({ searchParams }: { searchParams: Prom
               const customer = customerById.get(c.customer_id)
               return (
                 <tr key={c.id} className={REQUIERE_ATENCION.has(c.estado) ? styles.filaAtencion : undefined}>
-                  <td>
-                    <Link href={`/bandeja/${c.id}`} prefetch={false}>{CANAL_LABEL[c.canal] ?? c.canal}</Link>
+                  <td className={styles.tdCanal}>{CANAL_LABEL[c.canal] ?? c.canal}</td>
+                  <td className={styles.tdCliente}>
+                    <Link href={`/bandeja/${c.id}`} prefetch={false} className={styles.linkFila}>
+                      {customer?.nombre ?? customer?.telefono ?? "—"}
+                    </Link>
                   </td>
-                  <td>{customer?.nombre ?? customer?.telefono ?? "—"}</td>
-                  <td>
+                  <td className={styles.tdEstado}>
                     <span className={`${styles.pill} ${styles[c.estado]}`}>{ESTADO_LABEL[c.estado]}</span>
                   </td>
-                  <td className={styles.motivo}>{REQUIERE_ATENCION.has(c.estado) ? (c.motivo_atencion ?? "") : ""}</td>
-                  <td>{new Date(c.ultima_interaccion_at).toLocaleString("es-AR")}</td>
-                  <td>{c.estado !== "cerrada" && <CerrarButton conversationId={c.id} />}</td>
+                  <td className={`${styles.motivo} ${styles.tdMotivo}`}>{REQUIERE_ATENCION.has(c.estado) ? (c.motivo_atencion ?? "") : ""}</td>
+                  <td className={styles.tdFecha}>{new Date(c.ultima_interaccion_at).toLocaleString("es-AR")}</td>
+                  <td className={styles.tdAccion}>{c.estado !== "cerrada" && <CerrarButton conversationId={c.id} />}</td>
                 </tr>
               )
             })}

@@ -65,3 +65,21 @@
   color: #b23a3a;
   font-size: 0.85rem;
 }
+
+@media (max-width: 720px) {
+  .page {
+    padding: 16px;
+    align-items: flex-start;
+    padding-top: 12vh;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 380px;
+    padding: 24px;
+  }
+
+  .card button {
+    padding: 14px;
+  }
+}
