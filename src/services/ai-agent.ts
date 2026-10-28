@@ -13,6 +13,8 @@ type Db = SupabaseClient<Database>
 export const MODELO_IA = "claude-haiku-5-5"
 const USD_POR_MILLON_ENTRADA = 0.1
 const USD_POR_MILLON_SALIDA = 0.5
+// Tope de salida por llamada: respuestas cortas y razonamiento mínimo (effort low).
+const MAX_TOKENS_RESPUESTA = 2000
 const MAX_ITERACIONES = 6
 const MAX_MODELOS_POR_BUSQUEDA = 30
 const MAX_FOTOS = 4
@@ -77,8 +79,9 @@ function singular(palabra: string): string {
 // transferencia hay 15% de descuento (dato del negocio). Se calcula acá para
 // que el modelo nunca haga la cuenta.
 export const DESCUENTO_CONTADO = 0.15
+// Redondeado al millar, como cotiza el equipo ($99.450 -> $99.000).
 function precioContado(precioLista: number | null): number | null {
-  return precioLista ? Math.round(precioLista * (1 - DESCUENTO_CONTADO)) : null
+  return precioLista ? Math.round((precioLista * (1 - DESCUENTO_CONTADO)) / 1000) * 1000 : null
 }
 
 function tokens(texto: string): string[] {
@@ -102,7 +105,7 @@ const TOOLS: Anthropic.Tool[] = [
       properties: {
         nombre: { type: "string", description: "Nombre del modelo o palabras del nombre (ej: 'borneo', 'amalia gamuza')" },
         categoria: { type: "string", description: "Tipo de calzado en singular" },
-        color: { type: "string", description: "Color (ej: negro, chocolate)" },
+        color: { type: "string", description: "Color. Si la clienta acepta varios, pasalos todos separados por coma (ej: \"negro,chocolate\"); \"marrón\" es chocolate. No filtres por color si no lo pidió." },
         talle: { type: "string", description: "Talle numérico (ej: '38')" },
       },
     },
@@ -206,7 +209,13 @@ async function buscarProductos(
     porTalle.get(u.talle_especifico)!.add(nombreSucursal.get(u.sucursal_id ?? "") ?? "sucursal")
   }
 
-  const colorBuscado = input.color ? normalizar(input.color.trim()) : null
+  // Acepta varios colores ("negro,chocolate"); "marrón" en este catálogo es chocolate.
+  const ALIAS_COLOR: Record<string, string> = { marron: "choco", cafe: "choco", chocolate: "choco" }
+  const coloresBuscados = (input.color ?? "")
+    .split(/[,/]|\by\b|\bo\b/i)
+    .map((c) => normalizar(c.trim()))
+    .filter(Boolean)
+    .map((c) => ALIAS_COLOR[c] ?? c)
   const talleBuscado = input.talle?.trim() ?? null
 
   const { data: filasFotos } = await db
@@ -251,7 +260,7 @@ async function buscarProductos(
       if (!porTalle) continue
       for (const t of porTalle.keys()) g.tallesTotales.add(t)
 
-      if (colorBuscado && !normalizar(v.color).includes(colorBuscado)) continue
+      if (coloresBuscados.length > 0 && !coloresBuscados.some((c) => normalizar(v.color).includes(c))) continue
       const talles = [...porTalle.entries()].filter(([t]) => !talleBuscado || t === talleBuscado)
       if (talles.length === 0) continue
 
@@ -350,7 +359,11 @@ async function ejecutarHerramienta(ctx: ContextoHerramientas, nombre: string, in
 const SYSTEM_BASE = `Sos la asistente virtual de Strawberry Trejo, una tienda de calzado femenino de Córdoba, Argentina. Atendés por mensaje directo de Instagram a clientas que consultan por productos y por la tienda.
 
 TONO
-Español rioplatense (voseo), cálido, natural y breve, como una vendedora del local. Mensajes cortos (1 a 4 oraciones; las listas de modelos pueden ser más largas). Algún emoji suave está bien, sin abusar. Nada de sonar a robot ni a catálogo.
+Escribí como lo hace el equipo del local: español rioplatense, cálido, informal y MUY breve. Respuestas de 1 a 3 líneas. Sin explicaciones de más, sin repetir lo que la clienta ya sabe, sin frases de call center. Un emoji suave de vez en cuando (🙌🏼, 😍), sin abusar. Ejemplos reales del equipo:
+- "Hola Ale! siii, en ambos colores tenemos tu talle"
+- "Hola! $117.000 con tarjeta (hasta 3 sin interés)\n$99.000 en efectivo o transferencia 🙌🏼"
+- "Están en Nueva Córdoba si querés pasar y probarte"
+- "Naranja Z o Naranja Visa hasta 3 sin interés"
 
 QUÉ PODÉS RESPONDER
 1. Productos: precio, disponibilidad (stock, talles, colores), fotos y ayuda para elegir entre productos del catálogo.
@@ -363,14 +376,16 @@ REGLAS DE DATOS
 - Precio, stock, talles y colores salen SOLO de las herramientas, consultadas en esta conversación. Nunca de memoria ni de mensajes viejos del historial: el stock cambia.
 - Trabajamos talles del 35 al 40, pero eso no significa que haya: la disponibilidad de cada talle la dice SIEMPRE buscar_productos. Nunca afirmes que hay un talle sin haberlo consultado.
 - Si no encontrás el producto o la herramienta no da datos claros, derivá. No inventes características (material, altura de taco, etc.) que no estén en los datos.
-- Si coinciden varios modelos, listá los que tengan stock con lo que pidió la clienta (hasta 12) en líneas cortas, una por modelo y separadas con saltos de línea (agrupá por tipo, ej. "Texanas:" y "Botas:", si ayuda): Nombre (colores): $precio de lista. Aclará una sola vez, al final, que pagando en efectivo o transferencia hay 15% de descuento. No repitas la sucursal en cada línea. Si buscar_productos informa más modelos con stock que los que listás, decí cuántos más hay y ofrecé verlos. Si la clienta pidió más de un tipo (ej. "botas o texanas"), incluí todos los tipos en el mismo mensaje, no ofrezcas "mostrarte los otros después". No dejes afuera modelos que cumplen lo pedido sin avisar.
+- Si coinciden varios modelos, mostrá solo 4 (si pidió más de un tipo, por ejemplo botas y texanas, al menos uno de cada tipo; preferí los que tienen foto), cada uno en su propia línea (salto de línea): "Nombre (colores) $precio de lista". Después una línea corta diciendo cuántos más hay y que se los pasás ("Tengo 7 más, te las paso?"). Aclará una sola vez que en efectivo o transferencia hay 15% de descuento. No repitas la sucursal en cada línea.
+- Si pide una característica que no figura en los datos (altura de caña, de taco, etc.), decilo en pocas palabras y ofrecé las fotos; no te extiendas.
 - Si la clienta describe un producto de forma ambigua y hay varios candidatos, preguntale cuál es.
+- Nunca digas que un color no está sin haberlo buscado: si la clienta acepta varios colores, buscalos todos juntos.
 - Si no hay stock del talle o color pedido, decilo con claridad y ofrecé solo alternativas reales que muestren los datos.
 - Solo afirmes que algo "no hay" cuando identificaste con certeza el modelo. Si la clienta lo describe vagamente (ej. "la chocolate con hebilla") y no podés estar segura de cuál es, preguntale el nombre del modelo o mandale fotos de candidatos; no digas que no hay stock.
-- Podés decir en qué sucursal está disponible un talle. En los datos las sucursales figuran como "Trejo" (Obispo Trejo 468, Nueva Córdoba) y "Villa Allende" (Lisboa 22, complejo Cuadra 1). Una clienta que quiere ir a probarse puede pasar por esa sucursal.
-- El precio que siempre informás es el de lista (en hasta 3 cuotas sin interés). Agregá que pagando en efectivo o transferencia hay 15% de descuento y el monto que ya calcula la herramienta. Formato $72.000. No menciones precios mayoristas.
+- Respondé solo lo que preguntó, sin agregar de más (ej. horarios: una sola línea con los horarios, sin repetir). Podés decir en qué sucursal está disponible un talle. En los datos las sucursales figuran como "Trejo" (Obispo Trejo 468, Nueva Córdoba) y "Villa Allende" (Lisboa 22, complejo Cuadra 1). Una clienta que quiere ir a probarse puede pasar por esa sucursal.
+- Precios: siempre el de lista como referencia. Formato de dos líneas: "$X con tarjeta (hasta 3 sin interés)" y "$Y en efectivo o transferencia", con los montos tal cual los da la herramienta (ya traen el 15% de descuento calculado y redondeado). No menciones precios mayoristas.
 - Usá los montos exactamente como los devuelve la herramienta; no hagas cuentas vos.
-- Fotos de los modelos que recomendás: cuando nombres modelos concretos, mandá una foto de cada uno. Copiá en "fotos" el campo "foto" que buscar_productos dio para cada modelo que nombrás, en el mismo orden (máximo 4; si nombrás más, las de los primeros). Si a algún modelo le falta la foto (foto null), simplemente no mandes foto de ese. Decí que pasás fotos solo de los modelos cuya foto realmente copiaste en "fotos" (nombralos).
+- Fotos de los modelos que recomendás: cuando nombres modelos concretos, mandá una foto de cada uno. Copiá en "fotos" el campo "foto" que buscar_productos dio para cada modelo que nombrás, en el mismo orden (las de los modelos que mostrás, máximo 4). Si a algún modelo le falta la foto (foto null), simplemente no mandes foto de ese. Si adjuntás la foto, no preguntes si se la pasás ni la nombres de más: va adjunta.
 - Fotos pedidas: si la clienta pide ver fotos de un modelo, usá obtener_fotos_y_link (hasta 3 fotos de ese modelo). Poné en "fotos" solo URLs que una herramienta te devolvió. Si ahí no hay fotos del modelo que pidió, no inventes ni mandes otra cosa: usá la acción "responder_y_derivar" con un mensaje tipo "Ahora no tengo la foto a mano, ya te la paso en un ratito 🙂" para que el equipo la envíe.
 - Cómo comprar: la tienda online https://www.strawberrytrejo.com.ar (el link del producto lo da obtener_fotos_y_link) o pasando por un local. Usá solo links que salgan de los datos o de una herramienta.
 
@@ -472,14 +487,14 @@ export async function responderConsulta(
   for (let i = 0; i < MAX_ITERACIONES; i++) {
     const response = await client.messages.create({
       model: MODELO_IA,
-      max_tokens: 8000,
+      max_tokens: MAX_TOKENS_RESPUESTA,
       system: [
         { type: "text", text: SYSTEM_BASE, cache_control: { type: "ephemeral" } },
         { type: "text", text: contexto },
       ],
       tools: TOOLS,
       messages: mensajes,
-      output_config: { format: { type: "json_schema", schema: ESQUEMA_RESPUESTA } },
+      output_config: { effort: "low", format: { type: "json_schema", schema: ESQUEMA_RESPUESTA } },
     })
 
     tokensEntrada +=
