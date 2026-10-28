@@ -363,3 +363,13 @@
   max-width: 120px;
   border-radius: 8px;
 }
+
+.anteriores {
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  color: #8b7a7e;
+}
+
+.anteriores a {
+  color: #8c2b4a;
+}

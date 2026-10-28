@@ -34,6 +34,15 @@ export default async function ConversationDetailPage({
 
   const messages = await listMessages(db, id)
 
+  const { data: anteriores } = await db
+    .schema("atencion")
+    .from("conversations")
+    .select("id, estado, created_at, ultima_interaccion_at")
+    .eq("customer_id", conversation.customer_id)
+    .neq("id", id)
+    .order("created_at", { ascending: false })
+    .limit(6)
+
   const { data: borrador } = await db
     .schema("atencion")
     .from("borradores_ia")
@@ -59,6 +68,20 @@ export default async function ConversationDetailPage({
         </div>
         <ConversationActions conversationId={conversation.id} estado={conversation.estado} />
       </div>
+
+      {anteriores && anteriores.length > 0 && (
+        <p className={styles.anteriores}>
+          Conversaciones anteriores con esta clienta:{" "}
+          {anteriores.map((a, i) => (
+            <span key={a.id}>
+              {i > 0 && " · "}
+              <Link href={`/bandeja/${a.id}`} prefetch={false}>
+                {new Date(a.created_at).toLocaleDateString("es-AR")}
+              </Link>
+            </span>
+          ))}
+        </p>
+      )}
 
       {conversation.motivo_atencion && (conversation.estado === "intervencion_humana" || conversation.estado === "requiere_aprobacion") && (
         <p className={styles.bannerAtencion}>{conversation.motivo_atencion}</p>

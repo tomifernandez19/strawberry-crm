@@ -7,26 +7,44 @@ type Conversation = Database["atencion"]["Tables"]["conversations"]["Row"]
 type ConversationMessage = Database["atencion"]["Tables"]["conversation_messages"]["Row"]
 type Canal = Conversation["canal"]
 
-// (canal, canal_thread_id) es UNIQUE — esto es lo que evita crear una
-// conversación duplicada si un webhook llega reintentado.
+const VENTANA_MS = 24 * 60 * 60 * 1000
+
+// Un hilo de Instagram (canal + id de la clienta) puede tener varias
+// conversaciones a lo largo del tiempo: una por "caso". Si pasaron más de 24 h
+// sin actividad, el próximo mensaje abre una conversación nueva (y cierra la
+// vieja). Excepción: si la vieja sigue esperando al equipo, el caso no está
+// resuelto y se sigue en la misma. Solo puede haber UNA abierta por hilo (índice
+// único parcial), lo que evita duplicados si Meta reintenta un webhook.
 export async function getOrCreateConversation(
   db: Db,
   params: { customerId: string; canal: Canal; canalThreadId: string }
 ): Promise<Conversation> {
-  const { data: existing, error: findError } = await db
+  const { data: ultima, error: findError } = await db
     .schema("atencion")
     .from("conversations")
     .select("*")
     .eq("canal", params.canal)
     .eq("canal_thread_id", params.canalThreadId)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   if (findError) throw findError
-  if (existing) {
-    if (existing.estado === "cerrada") {
-      return reabrirConversacion(db, existing.id)
+
+  if (ultima) {
+    const inactiva = Date.now() - new Date(ultima.ultima_interaccion_at).getTime() > VENTANA_MS
+    const esperaAlEquipo = ultima.estado === "intervencion_humana" || ultima.estado === "requiere_aprobacion"
+
+    if (!inactiva || esperaAlEquipo) {
+      return ultima.estado === "cerrada" ? reabrirConversacion(db, ultima.id) : ultima
     }
-    return existing
+    if (ultima.estado !== "cerrada") {
+      await db
+        .schema("atencion")
+        .from("conversations")
+        .update({ estado: "cerrada", cerrada_at: new Date().toISOString(), motivo_atencion: null })
+        .eq("id", ultima.id)
+    }
   }
 
   const { data: created, error: insertError } = await db
@@ -40,7 +58,22 @@ export async function getOrCreateConversation(
     .select("*")
     .single()
 
-  if (insertError) throw insertError
+  if (insertError) {
+    // Otro webhook simultáneo ya abrió la conversación (índice único): usar esa.
+    if (insertError.code === "23505") {
+      const { data: abierta } = await db
+        .schema("atencion")
+        .from("conversations")
+        .select("*")
+        .eq("canal", params.canal)
+        .eq("canal_thread_id", params.canalThreadId)
+        .neq("estado", "cerrada")
+        .limit(1)
+        .maybeSingle()
+      if (abierta) return abierta
+    }
+    throw insertError
+  }
   return created
 }
 
