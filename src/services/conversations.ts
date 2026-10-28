@@ -82,7 +82,7 @@ export async function setConversationEstado(
   db: Db,
   conversationId: string,
   estado: Conversation["estado"],
-  extra?: { nivelConfianza?: 1 | 2 | 3 | null; asignadoA?: string | null }
+  extra?: { nivelConfianza?: 1 | 2 | 3 | null; asignadoA?: string | null; motivoAtencion?: string | null }
 ): Promise<Conversation> {
   const { data, error } = await db
     .schema("atencion")
@@ -91,6 +91,8 @@ export async function setConversationEstado(
       estado,
       nivel_confianza_actual: extra?.nivelConfianza,
       asignado_a: extra?.asignadoA,
+      // Cualquier cambio de estado limpia el motivo, salvo que se indique uno nuevo.
+      motivo_atencion: extra?.motivoAtencion ?? null,
       cerrada_at: estado === "cerrada" ? new Date().toISOString() : null,
     })
     .eq("id", conversationId)

@@ -9,7 +9,7 @@ const TABS = [
   { href: "/catalogo", label: "Catálogo" },
 ]
 
-export default function NavTabs() {
+export default function NavTabs({ pendientes }: { pendientes: number }) {
   const pathname = usePathname()
 
   return (
@@ -23,6 +23,7 @@ export default function NavTabs() {
             className={active ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink}
           >
             {tab.label}
+            {tab.href === "/bandeja" && pendientes > 0 && <span className={styles.badge}>{pendientes}</span>}
           </Link>
         )
       })}

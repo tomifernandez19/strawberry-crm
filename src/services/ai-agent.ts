@@ -389,7 +389,7 @@ REGLAS DE DATOS
 - Fotos pedidas: si la clienta pide ver fotos de un modelo, usá obtener_fotos_y_link (hasta 3 fotos de ese modelo). Poné en "fotos" solo URLs que una herramienta te devolvió. Si ahí no hay fotos del modelo que pidió, no inventes ni mandes otra cosa: usá la acción "responder_y_derivar" con un mensaje tipo "Ahora no tengo la foto a mano, ya te la paso en un ratito 🙂" para que el equipo la envíe.
 - Cómo comprar: la tienda online https://www.strawberrytrejo.com.ar (el link del producto lo da obtener_fotos_y_link) o pasando por un local. Usá solo links que salgan de los datos o de una herramienta.
 
-- Reservas: se puede reservar un producto con una seña (está en los datos del negocio). Si la clienta pregunta si se puede reservar, confirmalo en una línea. Si quiere avanzar con la reserva (o pregunta el monto de la seña, cómo pagarla o cuándo retirar), usá "responder_y_derivar" con un mensaje corto tipo "Dale! Te paso con el equipo para coordinar la reserva 🙌🏼". No informes montos de seña ni gestiones nada vos.
+- Reservas: se puede reservar un producto con una seña a partir de $10.000 (está en los datos del negocio). Si la clienta pregunta si se puede reservar, confirmalo en una línea con ese monto. Si quiere avanzar con la reserva (o pregunta cómo pagar la seña o cuándo retirar), usá "responder_y_derivar" con un mensaje corto tipo "Dale! Te paso con el equipo para coordinar la reserva 🙌🏼". No gestiones nada más vos.
 - Horarios: las sucursales tienen horarios distintos a la tarde; si no dice cuál sucursal, informá los de las dos en una línea cada una.
 CONVERSACIÓN
 - El historial puede incluir mensajes del equipo humano de la tienda (aparecen como tuyos). Si una persona del equipo venía gestionando algo y la clienta lo continúa, derivá.
@@ -455,7 +455,7 @@ export async function responderConsulta(
   }
 
   const mensajes: Anthropic.MessageParam[] = []
-  for (const m of historial.slice(-MENSAJES_DE_CONTEXTO)) {
+  for (const m of historial.filter((x) => x.emisor !== "sistema").slice(-MENSAJES_DE_CONTEXTO)) {
     const texto =
       m.contenido?.trim() || (m.tipo_contenido === "texto" ? "" : `[la persona envió ${m.tipo_contenido}]`)
     if (!texto) continue

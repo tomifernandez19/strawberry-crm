@@ -14,13 +14,20 @@ const ESTADO_LABEL: Record<string, string> = {
   nueva: "Nueva",
   ia_respondiendo: "IA respondiendo",
   requiere_aprobacion: "Requiere aprobación",
-  intervencion_humana: "Intervención humana",
+  intervencion_humana: "Derivada al equipo",
   cerrada: "Cerrada",
 }
 
 export default async function BandejaPage() {
   const db = createServiceClient()
-  const conversations = await listConversations(db)
+  const todas = await listConversations(db)
+  // Lo que espera al equipo va arriba; dentro de cada grupo, lo más reciente primero.
+  const REQUIERE_ATENCION = new Set(["intervencion_humana", "requiere_aprobacion"])
+  const conversations = [
+    ...todas.filter((c) => REQUIERE_ATENCION.has(c.estado)),
+    ...todas.filter((c) => !REQUIERE_ATENCION.has(c.estado)),
+  ]
+  const pendientes = todas.filter((c) => REQUIERE_ATENCION.has(c.estado)).length
 
   const customerIds = [...new Set(conversations.map((c) => c.customer_id))]
   const { data: customers } = await db
@@ -33,6 +40,11 @@ export default async function BandejaPage() {
   return (
     <div>
       <h1>Conversaciones</h1>
+      {pendientes > 0 && (
+        <p className={styles.resumenAtencion}>
+          {pendientes === 1 ? "1 conversación espera al equipo" : `${pendientes} conversaciones esperan al equipo`}
+        </p>
+      )}
 
       {conversations.length === 0 ? (
         <div className={styles.emptyState}>
@@ -46,6 +58,7 @@ export default async function BandejaPage() {
               <th>Canal</th>
               <th>Cliente</th>
               <th>Estado</th>
+              <th>Motivo</th>
               <th>Última interacción</th>
             </tr>
           </thead>
@@ -53,7 +66,7 @@ export default async function BandejaPage() {
             {conversations.map((c) => {
               const customer = customerById.get(c.customer_id)
               return (
-                <tr key={c.id}>
+                <tr key={c.id} className={REQUIERE_ATENCION.has(c.estado) ? styles.filaAtencion : undefined}>
                   <td>
                     <Link href={`/bandeja/${c.id}`}>{CANAL_LABEL[c.canal] ?? c.canal}</Link>
                   </td>
@@ -61,6 +74,7 @@ export default async function BandejaPage() {
                   <td>
                     <span className={`${styles.pill} ${styles[c.estado]}`}>{ESTADO_LABEL[c.estado]}</span>
                   </td>
+                  <td className={styles.motivo}>{REQUIERE_ATENCION.has(c.estado) ? (c.motivo_atencion ?? "") : ""}</td>
                   <td>{new Date(c.ultima_interaccion_at).toLocaleString("es-AR")}</td>
                 </tr>
               )

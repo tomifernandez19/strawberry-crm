@@ -49,7 +49,9 @@ export async function procesarMensajeEntrante(
   if (!msg.contenido) {
     // Audio/imagen sin texto: no hay nada que clasificar. Se marca para
     // que un humano la vea — si no, queda invisible en la bandeja.
-    await setConversationEstado(db, conversation.id, "intervencion_humana")
+    await setConversationEstado(db, conversation.id, "intervencion_humana", {
+      motivoAtencion: "La clienta mandó un audio, foto o archivo sin texto",
+    })
     return
   }
 
@@ -68,7 +70,7 @@ export async function procesarMensajeEntrante(
   const resultado = await clasificarYResponder(db, msg.contenido)
 
   if (resultado.clasificacion === "reclamo") {
-    await setConversationEstado(db, conversation.id, "intervencion_humana")
+    await setConversationEstado(db, conversation.id, "intervencion_humana", { motivoAtencion: "Posible reclamo" })
     return
   }
 
@@ -88,7 +90,9 @@ export async function procesarMensajeEntrante(
     })
     // Se mandó el mensaje de espera, pero eso solo cumple la promesa si
     // alguien la responde de verdad después — se marca para que no se pierda.
-    await setConversationEstado(db, conversation.id, "intervencion_humana")
+    await setConversationEstado(db, conversation.id, "intervencion_humana", {
+      motivoAtencion: "No se entendió la consulta",
+    })
     return
   }
 
@@ -102,6 +106,20 @@ export async function procesarMensajeEntrante(
     })
   }
 }
+
+// Motivos que genera el sistema (no el modelo), en lenguaje claro.
+const MOTIVOS_SISTEMA: Record<string, string> = {
+  equipo_atendiendo: "Una persona del equipo está atendiendo; la clienta siguió escribiendo",
+  tope_diario_alcanzado: "Se alcanzó el tope diario de gasto de IA",
+  respuesta_vacia: "La IA no pudo armar una respuesta",
+  accion_invalida: "La IA no pudo armar una respuesta",
+  respuesta_no_interpretable: "La IA no pudo armar una respuesta",
+  rechazo_del_modelo: "La IA no pudo responder esta consulta",
+  respuesta_cortada: "La IA no pudo armar una respuesta a tiempo",
+  sin_respuesta_del_modelo: "La IA no pudo armar una respuesta",
+  sin_mensaje_pendiente: "No hay un mensaje de la clienta para responder",
+}
+const motivoLegible = (motivo: string) => MOTIVOS_SISTEMA[motivo] ?? (motivo || "Derivada por la IA")
 
 // Camino con Claude (Fase 10). "sombra": deja un borrador en la bandeja para
 // que una persona lo apruebe, no manda nada solo. "auto": programa el envío
@@ -142,14 +160,18 @@ async function procesarConIa(
       respuesta_generada: (err instanceof Error ? err.message : String(err)).slice(0, 500),
       modelo_ia: MODELO_IA,
     })
-    await setConversationEstado(db, conversation.id, "intervencion_humana")
+    await setConversationEstado(db, conversation.id, "intervencion_humana", {
+      motivoAtencion: "Falló la IA: revisá la conversación",
+    })
     return
   }
 
   if (resultado.accion === "sin_respuesta") return
 
   if (resultado.accion === "derivar") {
-    await setConversationEstado(db, conversation.id, "intervencion_humana")
+    await setConversationEstado(db, conversation.id, "intervencion_humana", {
+      motivoAtencion: motivoLegible(resultado.motivo),
+    })
     if (params.modo === "auto" && resultado.motivo !== "equipo_atendiendo") {
       await programarRespuesta(db, {
         conversationId: conversation.id,
@@ -171,7 +193,11 @@ async function procesarConIa(
       clasificacion: "ia",
       fotos: resultado.fotos,
     })
-    if (requiereSeguimiento) await setConversationEstado(db, conversation.id, "intervencion_humana")
+    if (requiereSeguimiento) {
+      await setConversationEstado(db, conversation.id, "intervencion_humana", {
+        motivoAtencion: motivoLegible(resultado.motivo),
+      })
+    }
     return
   }
 
@@ -189,8 +215,11 @@ async function procesarConIa(
     contenido: resultado.mensaje,
     fotos: resultado.fotos,
     requiere_seguimiento: requiereSeguimiento,
+    motivo: requiereSeguimiento ? motivoLegible(resultado.motivo) : null,
   })
-  await setConversationEstado(db, conversation.id, requiereSeguimiento ? "intervencion_humana" : "requiere_aprobacion")
+  await setConversationEstado(db, conversation.id, requiereSeguimiento ? "intervencion_humana" : "requiere_aprobacion", {
+    motivoAtencion: requiereSeguimiento ? motivoLegible(resultado.motivo) : "Borrador de la IA para aprobar",
+  })
 }
 
 // Cuando alguien responde un DM desde la app del canal directamente (no

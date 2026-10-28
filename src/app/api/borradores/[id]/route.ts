@@ -45,7 +45,9 @@ export async function POST(request: Request, ctx: RouteContext<"/api/borradores/
     await resolver("descartado")
     await registrarDecision("rechazado")
     // Si la IA no supo, lo atiende una persona.
-    await setConversationEstado(db, borrador.conversation_id, "intervencion_humana")
+    await setConversationEstado(db, borrador.conversation_id, "intervencion_humana", {
+      motivoAtencion: "Descartaste el borrador de la IA: falta responder a mano",
+    })
     return NextResponse.json({ ok: true })
   }
 
@@ -63,7 +65,12 @@ export async function POST(request: Request, ctx: RouteContext<"/api/borradores/
     })
     await resolver("enviado")
     await registrarDecision(editado ? "editado" : "aprobado", editado ? contenido : undefined)
-    await setConversationEstado(db, borrador.conversation_id, borrador.requiere_seguimiento ? "intervencion_humana" : "ia_respondiendo")
+    await setConversationEstado(
+      db,
+      borrador.conversation_id,
+      borrador.requiere_seguimiento ? "intervencion_humana" : "ia_respondiendo",
+      { motivoAtencion: borrador.requiere_seguimiento ? borrador.motivo : null }
+    )
     return NextResponse.json({ ok: true, fotosFallidas })
   } catch (err) {
     // El borrador queda pendiente para reintentar.

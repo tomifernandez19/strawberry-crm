@@ -136,6 +136,7 @@ export interface Database {
             | "intervencion_humana"
             | "cerrada"
           asignado_a: string | null
+          motivo_atencion: string | null
           nivel_confianza_actual: 1 | 2 | 3 | null
           ultima_interaccion_at: string
           cerrada_at: string | null
@@ -376,6 +377,7 @@ export interface Database {
           contenido: string
           fotos: string[]
           requiere_seguimiento: boolean
+          motivo: string | null
           estado: "pendiente" | "enviado" | "descartado"
           created_at: string
           resuelto_at: string | null

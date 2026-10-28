@@ -60,6 +60,10 @@ export default async function ConversationDetailPage({
         <ConversationActions conversationId={conversation.id} estado={conversation.estado} />
       </div>
 
+      {conversation.motivo_atencion && (conversation.estado === "intervencion_humana" || conversation.estado === "requiere_aprobacion") && (
+        <p className={styles.bannerAtencion}>{conversation.motivo_atencion}</p>
+      )}
+
       <div className={styles.thread}>
         {messages.length === 0 && <p style={{ color: "#8b7a7e" }}>Sin mensajes todavía.</p>}
         {messages.map((m) => (
