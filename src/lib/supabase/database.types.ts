@@ -364,6 +364,7 @@ export interface Database {
           ai_run_id: string | null
           contenido: string
           fotos: string[]
+          requiere_seguimiento: boolean
           estado: "pendiente" | "enviado" | "descartado"
           created_at: string
           resuelto_at: string | null

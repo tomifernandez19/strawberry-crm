@@ -63,7 +63,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/borradores/
     })
     await resolver("enviado")
     await registrarDecision(editado ? "editado" : "aprobado", editado ? contenido : undefined)
-    await setConversationEstado(db, borrador.conversation_id, "ia_respondiendo")
+    await setConversationEstado(db, borrador.conversation_id, borrador.requiere_seguimiento ? "intervencion_humana" : "ia_respondiendo")
     return NextResponse.json({ ok: true, fotosFallidas })
   } catch (err) {
     // El borrador queda pendiente para reintentar.

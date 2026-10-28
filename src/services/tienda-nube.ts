@@ -116,3 +116,46 @@ export async function fetchProducto(tiendaNubeId: string): Promise<TiendaNubePro
   const data = (await tiendaNubeFetch(`/products/${tiendaNubeId}`, config)) as TiendaNubeApiProduct
   return normalize(data)
 }
+
+interface TiendaNubeApiProductoDetalle {
+  canonical_url?: string
+  images?: Array<{ id: number; src: string; position?: number }>
+  variants?: Array<{ values?: Array<Record<string, string>>; image_id?: number | null }>
+}
+
+function normalizarTexto(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+}
+
+// Fotos (máx. 3) y link de un producto, siempre desde Tienda Nube. Si piden
+// un color y Tienda Nube tiene la foto asociada a esa variante, se usa esa;
+// si no, las primeras del producto. Lista vacía = el producto no tiene fotos
+// cargadas (pasa con algunos modelos), y quien llama decide qué hacer.
+export async function fetchFotosYLink(
+  tiendaNubeId: string,
+  color?: string
+): Promise<{ link: string | null; fotos: string[] }> {
+  const config = getConfig()
+  const data = (await tiendaNubeFetch(`/products/${tiendaNubeId}`, config)) as TiendaNubeApiProductoDetalle
+
+  const imagenes = [...(data.images ?? [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  const url = (src: string) => (src.startsWith("//") ? `https:${src}` : src)
+
+  let elegidas = imagenes
+  if (color) {
+    const colorNorm = normalizarTexto(color.trim())
+    const idsDelColor = new Set(
+      (data.variants ?? [])
+        .filter((v) => (v.values ?? []).some((val) => Object.values(val).some((t) => normalizarTexto(t).includes(colorNorm))))
+        .map((v) => v.image_id)
+        .filter((id): id is number => typeof id === "number")
+    )
+    const delColor = imagenes.filter((img) => idsDelColor.has(img.id))
+    if (delColor.length > 0) elegidas = delColor
+  }
+
+  return { link: data.canonical_url ?? null, fotos: elegidas.slice(0, 3).map((img) => url(img.src)) }
+}

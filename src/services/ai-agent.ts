@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/supabase/database.types"
 import { listMessages } from "./conversations"
-import { fetchProducto } from "./tienda-nube"
+import { fetchFotosYLink } from "./tienda-nube"
 
 type Db = SupabaseClient<Database>
 
@@ -101,9 +101,10 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
-    name: "obtener_fotos",
+    name: "obtener_fotos_y_link",
     description:
-      "Devuelve hasta 3 URLs de fotos de un modelo (opcionalmente de un color). Usala cuando la clienta pida fotos o ver el producto.",
+      "Devuelve hasta 3 fotos de un modelo (de la tienda online) y el link del producto para comprar. Usala cuando la clienta pida fotos, quiera ver el producto o pregunte cómo comprarlo. " +
+      "Si no devuelve fotos, ese modelo no tiene fotos cargadas.",
     input_schema: {
       type: "object",
       properties: {
@@ -243,44 +244,22 @@ async function buscarProductos(
   return { total_coincidencias: resultados.length, modelos: resultados.slice(0, 6) }
 }
 
-async function obtenerFotos(ctx: ContextoHerramientas, input: { modelo_id: string; color?: string }) {
-  const { db } = ctx
-  const { data: variantes } = await db
-    .from("variantes")
-    .select("color, imagen_url")
-    .eq("modelo_id", input.modelo_id)
-    .not("imagen_url", "is", null)
-  const colorBuscado = input.color ? normalizar(input.color.trim()) : null
-
-  let urls = [
-    ...new Set(
-      (variantes ?? [])
-        .filter((v) => !colorBuscado || normalizar(v.color).includes(colorBuscado))
-        .map((v) => v.imagen_url as string)
-    ),
-  ]
-
-  if (urls.length === 0) {
-    // Respaldo: las fotos de la tienda online (Tienda Nube).
-    const { data: modelo } = await db.from("modelos").select("tiendanube_id").eq("id", input.modelo_id).maybeSingle()
-    if (modelo?.tiendanube_id) {
-      try {
-        urls = (await fetchProducto(modelo.tiendanube_id)).imagenes
-      } catch {
-        urls = []
-      }
-    }
+async function obtenerFotosYLink(ctx: ContextoHerramientas, input: { modelo_id: string; color?: string }) {
+  const { data: modelo } = await ctx.db.from("modelos").select("tiendanube_id").eq("id", input.modelo_id).maybeSingle()
+  if (!modelo?.tiendanube_id) {
+    return { fotos: [], link_producto: null, nota: "Este modelo no está en la tienda online: no hay fotos disponibles." }
   }
-
-  urls = urls.slice(0, 3)
-  for (const u of urls) ctx.fotosPermitidas.add(u)
-  return urls.length > 0 ? { fotos: urls } : { fotos: [], nota: "No hay fotos cargadas para ese modelo." }
+  const { fotos, link } = await fetchFotosYLink(modelo.tiendanube_id, input.color)
+  for (const f of fotos) ctx.fotosPermitidas.add(f)
+  return fotos.length > 0
+    ? { fotos, link_producto: link }
+    : { fotos: [], link_producto: link, nota: "Este modelo no tiene fotos cargadas en la tienda online." }
 }
 
 async function ejecutarHerramienta(ctx: ContextoHerramientas, nombre: string, input: unknown): Promise<unknown> {
   try {
     if (nombre === "buscar_productos") return await buscarProductos(ctx, (input ?? {}) as never)
-    if (nombre === "obtener_fotos") return await obtenerFotos(ctx, input as never)
+    if (nombre === "obtener_fotos_y_link") return await obtenerFotosYLink(ctx, input as never)
     return { error: `Herramienta desconocida: ${nombre}` }
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) }
@@ -289,29 +268,31 @@ async function ejecutarHerramienta(ctx: ContextoHerramientas, nombre: string, in
 
 // ---------------------------------------------------------------------- prompt
 
-const SYSTEM_BASE = `Sos la asistente virtual de Strawberry Trejo, una tienda de calzado femenino de Córdoba, Argentina. Atendés por mensaje directo de Instagram a clientas que consultan por productos.
+const SYSTEM_BASE = `Sos la asistente virtual de Strawberry Trejo, una tienda de calzado femenino de Córdoba, Argentina. Atendés por mensaje directo de Instagram a clientas que consultan por productos y por la tienda.
 
 TONO
 Español rioplatense (voseo), cálido, natural y breve, como una vendedora del local. Mensajes de 1 a 4 oraciones. Algún emoji suave está bien, sin abusar. Nada de sonar a robot ni a catálogo.
 
 QUÉ PODÉS RESPONDER
-Únicamente consultas sobre productos: precio, disponibilidad (stock, talles, colores), fotos y ayuda para elegir entre productos del catálogo.
+1. Productos: precio, disponibilidad (stock, talles, colores), fotos y ayuda para elegir entre productos del catálogo.
+2. Preguntas generales de la tienda, usando SOLO lo que figura en los DATOS DEL NEGOCIO de más abajo: envíos, medios de pago y cuotas, horarios, ubicación de las sucursales, política de cambios y devoluciones, talles y medidas, y cómo comprar (tienda online o en los locales).
 
 QUÉ NO — acción "derivar"
-Todo lo que no sea una consulta de producto: envíos y costos de envío, seguimiento de pedidos, cambios, devoluciones, reclamos o quejas, horarios, cómo llegar, ventas mayoristas, pedidos especiales, reservar o apartar productos, confirmar o gestionar una compra o un pago, descuentos o negociar precios, y cualquier tema ajeno a la tienda. En esos casos no contestes: derivá a una persona del equipo.
-Los datos del negocio de más abajo sirven para dar contexto dentro de una consulta de producto (por ejemplo, mencionar los medios de pago o que desde $150.000 el envío es gratis al informar un precio). No los uses para responder por sí solos consultas que corresponden a una persona.
+Reclamos, quejas o problemas con un producto o un pedido ya comprado; seguimiento de pedidos o de envíos en curso; gestionar un cambio o devolución puntual (sí podés explicar la política); reservar o apartar productos; descuentos extra o negociar precios; ventas mayoristas; pedidos especiales; y cualquier pregunta cuya respuesta NO esté en los datos del negocio ni salga de una herramienta (no inventes: derivá), o ajena a la tienda.
 
 REGLAS DE DATOS
 - Precio, stock, talles y colores salen SOLO de las herramientas, consultadas en esta conversación. Nunca de memoria ni de mensajes viejos del historial: el stock cambia.
+- Trabajamos talles del 35 al 40, pero eso no significa que haya: la disponibilidad de cada talle la dice SIEMPRE buscar_productos. Nunca afirmes que hay un talle sin haberlo consultado.
 - Si no encontrás el producto o la herramienta no da datos claros, derivá. No inventes características (material, altura de taco, etc.) que no estén en los datos.
 - Si hay muchos modelos que coinciden, nombrá como máximo 3 (los que tengan stock) y ofrecé ver más o pasar fotos. Mensajes cortos.
 - Si la clienta describe un producto de forma ambigua y hay varios candidatos, preguntale cuál es.
 - Si no hay stock del talle o color pedido, decilo con claridad y ofrecé solo alternativas reales que muestren los datos.
 - Solo afirmes que algo "no hay" cuando identificaste con certeza el modelo. Si la clienta lo describe vagamente (ej. "la chocolate con hebilla") y no podés estar segura de cuál es, preguntale el nombre del modelo o mandale fotos de candidatos; no digas que no hay stock.
 - Podés decir en qué sucursal está disponible un talle. En los datos las sucursales figuran como "Trejo" (Obispo Trejo 468, Nueva Córdoba) y "Villa Allende" (Lisboa 22, complejo Cuadra 1). Una clienta que quiere ir a probarse puede pasar por esa sucursal.
-- Usá los montos exactamente como los devuelve la herramienta; no hagas cuentas vos.
 - El precio que siempre informás es el de lista (en hasta 3 cuotas sin interés). Agregá que pagando en efectivo o transferencia hay 15% de descuento y el monto que ya calcula la herramienta. Formato $72.000. No menciones precios mayoristas.
-- Fotos: si piden ver el producto, usá obtener_fotos y poné en "fotos" solo URLs que esa herramienta te devolvió (máximo 3).
+- Usá los montos exactamente como los devuelve la herramienta; no hagas cuentas vos.
+- Fotos: usá obtener_fotos_y_link y poné en "fotos" solo URLs que esa herramienta te devolvió (máximo 3). Si la herramienta no devuelve fotos de ese modelo, no inventes ni mandes otra cosa: usá la acción "responder_y_derivar" con un mensaje tipo "Ahora no tengo la foto a mano, ya te la paso en un ratito 🙂" para que el equipo la envíe.
+- Cómo comprar: la tienda online https://www.strawberrytrejo.com.ar (el link del producto lo da obtener_fotos_y_link) o pasando por un local. Usá solo links que salgan de los datos o de una herramienta.
 
 CONVERSACIÓN
 - El historial puede incluir mensajes del equipo humano de la tienda (aparecen como tuyos). Si una persona del equipo venía gestionando algo y la clienta lo continúa, derivá.
@@ -322,13 +303,14 @@ CONVERSACIÓN
 
 ACCIONES
 - "responder": hay un mensaje listo para enviar.
+- "responder_y_derivar": hay un mensaje para enviar, pero además una persona tiene que completar algo (ej. mandar una foto que falta). Poné en "motivo" qué tiene que hacer el equipo.
 - "derivar": lo atiende una persona. Dejá "mensaje" vacío y explicá el motivo en "motivo".
 - "sin_respuesta": no hace falta contestar. "mensaje" vacío.`
 
 const ESQUEMA_RESPUESTA = {
   type: "object" as const,
   properties: {
-    accion: { type: "string" as const, enum: ["responder", "derivar", "sin_respuesta"] },
+    accion: { type: "string" as const, enum: ["responder", "responder_y_derivar", "derivar", "sin_respuesta"] },
     mensaje: { type: "string" as const },
     fotos: { type: "array" as const, items: { type: "string" as const } },
     motivo: { type: "string" as const },
@@ -350,7 +332,7 @@ async function cargarInfoNegocio(db: Db): Promise<string> {
 // ------------------------------------------------------------------ resultado
 
 export interface ResultadoAgente {
-  accion: "responder" | "derivar" | "sin_respuesta"
+  accion: "responder" | "responder_y_derivar" | "derivar" | "sin_respuesta"
   mensaje: string
   fotos: string[]
   motivo: string
@@ -462,13 +444,14 @@ export async function responderConsulta(
       // Solo se aceptan fotos que una herramienta devolvió en este mismo
       // turno — nunca una URL "escrita" por el modelo.
       const fotos = (parsed.fotos ?? []).filter((f) => ctx.fotosPermitidas.has(f)).slice(0, 3)
-      if (accion === "responder" && !mensaje) {
+      const conMensaje = accion === "responder" || accion === "responder_y_derivar"
+      if (conMensaje && !mensaje) {
         resultado = derivar("respuesta_vacia")
-      } else if (accion === "responder" || accion === "sin_respuesta" || accion === "derivar") {
+      } else if (conMensaje || accion === "sin_respuesta" || accion === "derivar") {
         resultado = {
           accion,
-          mensaje: accion === "responder" ? mensaje : "",
-          fotos: accion === "responder" ? fotos : [],
+          mensaje: conMensaje ? mensaje : "",
+          fotos: conMensaje ? fotos : [],
           motivo: parsed.motivo ?? "",
           aiRunId: null,
         }
@@ -489,7 +472,7 @@ export async function responderConsulta(
       tipo: "respuesta_conversacion",
       conversation_message_id: params.mensajeId,
       intencion_clasificada: resultado.accion,
-      nivel_confianza: resultado.accion === "responder" ? 2 : resultado.accion === "derivar" ? 3 : 1,
+      nivel_confianza: resultado.accion === "derivar" ? 3 : resultado.accion === "sin_respuesta" ? 1 : 2,
       fuentes_consultadas: fuentes as never,
       respuesta_generada: resultado.mensaje || resultado.motivo || null,
       modelo_ia: MODELO_IA,

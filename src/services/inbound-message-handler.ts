@@ -152,6 +152,8 @@ async function procesarConIa(
     return
   }
 
+  const requiereSeguimiento = resultado.accion === "responder_y_derivar"
+
   if (params.modo === "auto") {
     await programarRespuesta(db, {
       conversationId: conversation.id,
@@ -160,6 +162,7 @@ async function procesarConIa(
       clasificacion: "ia",
       fotos: resultado.fotos,
     })
+    if (requiereSeguimiento) await setConversationEstado(db, conversation.id, "intervencion_humana")
     return
   }
 
@@ -176,8 +179,9 @@ async function procesarConIa(
     ai_run_id: resultado.aiRunId,
     contenido: resultado.mensaje,
     fotos: resultado.fotos,
+    requiere_seguimiento: requiereSeguimiento,
   })
-  await setConversationEstado(db, conversation.id, "requiere_aprobacion")
+  await setConversationEstado(db, conversation.id, requiereSeguimiento ? "intervencion_humana" : "requiere_aprobacion")
 }
 
 // Cuando alguien responde un DM desde la app del canal directamente (no
