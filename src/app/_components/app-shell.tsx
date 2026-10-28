@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { getCurrentProfile } from "@/lib/supabase/session"
+import Link from "next/link"
 import { createServiceClient } from "@/lib/supabase/server"
 import AutoRefresh from "./auto-refresh"
 import LogoutButton from "./logout-button"
@@ -17,6 +18,13 @@ export default async function AppShell({ children }: { children: React.ReactNode
     .in("estado", ["intervencion_humana", "requiere_aprobacion"])
   const pendientes = count ?? 0
 
+  const { data: tokenInvalido } = await createServiceClient()
+    .schema("atencion")
+    .from("ajustes")
+    .select("valor")
+    .eq("clave", "instagram_token_invalido")
+    .maybeSingle()
+
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -31,6 +39,11 @@ export default async function AppShell({ children }: { children: React.ReactNode
         </div>
       </header>
       <AutoRefresh pendientes={pendientes} />
+      {tokenInvalido && (
+        <div className={styles.alertaConexion}>
+          Instagram desconectado: no se pueden enviar mensajes. <Link href="/ajustes">Renovar el token</Link>
+        </div>
+      )}
       <main className={styles.main}>{children}</main>
     </div>
   )

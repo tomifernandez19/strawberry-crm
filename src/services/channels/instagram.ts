@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
+import { marcarTokenInvalido, obtenerTokenInstagram } from "../instagram-token"
 import type {
   ChannelAdapter,
   EchoMessage,
@@ -137,8 +138,8 @@ export const instagramAdapter: ChannelAdapter = {
   },
 
   async sendMessage(message: OutboundMessage): Promise<SendMessageResult> {
-    const token = process.env.INSTAGRAM_ACCESS_TOKEN
-    if (!token) throw new Error("Falta INSTAGRAM_ACCESS_TOKEN")
+    const token = await obtenerTokenInstagram()
+    if (!token) throw new Error("Falta el token de Instagram: cargalo en Ajustes del CRM")
 
     // "me" resuelve solo al ID correcto para este token — confirmado
     // probando la API real, porque el ID que muestra el panel de Meta
@@ -156,7 +157,13 @@ export const instagramAdapter: ChannelAdapter = {
     })
 
     if (!response.ok) {
-      throw new Error(`Instagram sendMessage falló (${response.status}): ${await response.text()}`)
+      const detalle = await response.text()
+      // 401 / código 190 = el token venció o fue revocado.
+      if (response.status === 401 || detalle.includes('"code":190')) {
+        await marcarTokenInvalido()
+        throw new Error("El token de Instagram venció o fue revocado. Pegá uno nuevo en Ajustes del CRM y volvé a intentar.")
+      }
+      throw new Error(`Instagram sendMessage falló (${response.status}): ${detalle}`)
     }
 
     // Meta manda el mismo id como "mid" en el eco del webhook que llega
@@ -171,7 +178,7 @@ export const instagramAdapter: ChannelAdapter = {
 // El webhook solo manda el PSID del cliente, nunca su nombre — hay que
 // pedirlo aparte. Confirmado contra la API real con un cliente de verdad.
 export async function fetchInstagramProfile(psid: string): Promise<{ nombre?: string } > {
-  const token = process.env.INSTAGRAM_ACCESS_TOKEN
+  const token = await obtenerTokenInstagram()
   if (!token) return {}
 
   try {

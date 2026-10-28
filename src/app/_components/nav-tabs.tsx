@@ -7,6 +7,7 @@ import styles from "./shell.module.css"
 const TABS = [
   { href: "/bandeja", label: "Conversaciones" },
   { href: "/catalogo", label: "Catálogo" },
+  { href: "/ajustes", label: "Ajustes" },
 ]
 
 export default function NavTabs({ pendientes }: { pendientes: number }) {

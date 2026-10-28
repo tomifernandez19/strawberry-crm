@@ -11,7 +11,7 @@ const URL_APP = process.env.NEXT_PUBLIC_APP_URL ?? "https://strawberry-crm.verce
 // así que solo viaja el nombre de la clienta y el tipo de aviso.
 export async function avisarEquipo(
   db: Db,
-  params: { conversationId: string; titulo: string; mensaje: string }
+  params: { conversationId?: string; titulo: string; mensaje: string; ruta?: string }
 ): Promise<void> {
   try {
     const { data } = await db.schema("atencion").from("ajustes").select("valor").eq("clave", "ntfy_topic").maybeSingle()
@@ -25,7 +25,7 @@ export async function avisarEquipo(
         topic,
         title: params.titulo,
         message: params.mensaje,
-        click: `${URL_APP}/bandeja/${params.conversationId}`,
+        click: `${URL_APP}${params.ruta ?? (params.conversationId ? `/bandeja/${params.conversationId}` : "/bandeja")}`,
         priority: 4,
         tags: ["bell"],
       }),

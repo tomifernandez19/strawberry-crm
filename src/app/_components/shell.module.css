@@ -90,3 +90,16 @@
   font-weight: 700;
   text-align: center;
 }
+
+.alertaConexion {
+  padding: 10px 24px;
+  background: #b23a3a;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.alertaConexion a {
+  color: #fff;
+  text-decoration: underline;
+}
