@@ -346,6 +346,17 @@ export interface Database {
         Update: Partial<Database["atencion"]["Tables"]["respuestas_programadas"]["Row"]>
         Relationships: []
       }
+      fotos_producto: {
+        Row: {
+          modelo_id: string
+          link: string | null
+          fotos: Json
+          updated_at: string
+        }
+        Insert: Partial<Database["atencion"]["Tables"]["fotos_producto"]["Row"]> & { modelo_id: string }
+        Update: Partial<Database["atencion"]["Tables"]["fotos_producto"]["Row"]>
+        Relationships: []
+      }
       ajustes: {
         Row: {
           clave: string

@@ -14,6 +14,13 @@ export const MODELO_IA = "claude-haiku-5-5"
 const USD_POR_MILLON_ENTRADA = 0.1
 const USD_POR_MILLON_SALIDA = 0.5
 const MAX_ITERACIONES = 6
+const MAX_MODELOS_POR_BUSQUEDA = 30
+const MAX_FOTOS = 4
+
+interface FotoCache {
+  src: string
+  colores: string[]
+}
 const MENSAJES_DE_CONTEXTO = 14
 // Si una persona del equipo escribió hace menos de esto, está atendiendo a
 // la clienta: la IA no se mete.
@@ -166,7 +173,7 @@ async function buscarProductos(
     })
     .filter((x): x is { modelo: (typeof todos)[number]; puntaje: number } => x !== null)
     .sort((a, b) => b.puntaje - a.puntaje)
-    .slice(0, 40)
+    .slice(0, 150)
 
   if (puntuados.length === 0) {
     return { total_coincidencias: 0, modelos: [], nota: "No se encontró ningún modelo con esos datos." }
@@ -202,46 +209,118 @@ async function buscarProductos(
   const colorBuscado = input.color ? normalizar(input.color.trim()) : null
   const talleBuscado = input.talle?.trim() ?? null
 
-  const resultados = puntuados.map(({ modelo }) => {
-    const deEsteModelo = (variantes ?? []).filter((v) => v.modelo_id === modelo.id)
-    const tallesConStockTotal = new Set<string>()
-    for (const v of deEsteModelo) for (const t of stockPorVariante.get(v.id)?.keys() ?? []) tallesConStockTotal.add(t)
+  const { data: filasFotos } = await db
+    .schema("atencion")
+    .from("fotos_producto")
+    .select("modelo_id, link, fotos")
+    .in("modelo_id", ids)
+  const fotosPorModelo = new Map(
+    (filasFotos ?? []).map((f) => [f.modelo_id, { link: f.link, fotos: (f.fotos ?? []) as unknown as FotoCache[] }])
+  )
 
-    const colores = deEsteModelo
-      .filter((v) => !colorBuscado || normalizar(v.color).includes(colorBuscado))
-      .map((v) => {
-        const porTalle = stockPorVariante.get(v.id) ?? new Map<string, Set<string>>()
-        const talles = [...porTalle.entries()]
-          .filter(([t]) => !talleBuscado || t === talleBuscado)
-          .sort(([a], [b]) => a.localeCompare(b))
-        return {
-          color: v.color,
-          talles_con_stock: Object.fromEntries(talles.map(([t, suc]) => [t, [...suc].sort()])),
-          precio_lista_hasta_3_cuotas_sin_interes: v.precio_lista,
-          precio_efectivo_o_transferencia_con_15_por_ciento_off: precioContado(v.precio_lista),
-          cantidad_talles: talles.length,
-        }
+  // El ERP a veces tiene el mismo modelo cargado dos veces (ej. uno enlazado a
+  // la tienda online y otro no): para la clienta es un solo modelo, se juntan.
+  interface Grupo {
+    nombre: string
+    categoria: string | null
+    material: string | null
+    modeloIds: string[]
+    puntaje: number
+    colores: Map<string, { color: string; talles: Map<string, Set<string>>; lista: number | null }>
+    tallesTotales: Set<string>
+  }
+  const grupos = new Map<string, Grupo>()
+  for (const { modelo, puntaje } of puntuados) {
+    const clave = `${normalizar(modelo.descripcion).trim()}|${normalizar(modelo.material ?? "")}`
+    if (!grupos.has(clave)) {
+      grupos.set(clave, {
+        nombre: modelo.descripcion,
+        categoria: modelo.categoria,
+        material: modelo.material,
+        modeloIds: [],
+        puntaje,
+        colores: new Map(),
+        tallesTotales: new Set(),
       })
-      .filter((c) => c.cantidad_talles > 0)
-      .map(({ cantidad_talles, ...resto }) => {
-        void cantidad_talles
-        return resto
-      })
+    }
+    const g = grupos.get(clave)!
+    g.modeloIds.push(modelo.id)
+
+    for (const v of (variantes ?? []).filter((x) => x.modelo_id === modelo.id)) {
+      const porTalle = stockPorVariante.get(v.id)
+      if (!porTalle) continue
+      for (const t of porTalle.keys()) g.tallesTotales.add(t)
+
+      if (colorBuscado && !normalizar(v.color).includes(colorBuscado)) continue
+      const talles = [...porTalle.entries()].filter(([t]) => !talleBuscado || t === talleBuscado)
+      if (talles.length === 0) continue
+
+      const claveColor = normalizar(v.color)
+      if (!g.colores.has(claveColor)) g.colores.set(claveColor, { color: v.color, talles: new Map(), lista: null })
+      const c = g.colores.get(claveColor)!
+      c.lista ??= v.precio_lista
+      for (const [t, suc] of talles) {
+        if (!c.talles.has(t)) c.talles.set(t, new Set())
+        for (const su of suc) c.talles.get(t)!.add(su)
+      }
+    }
+  }
+
+  const resultados = [...grupos.values()].map((g) => {
+    const colores = [...g.colores.entries()].map(([claveColor, c]) => ({
+      claveColor,
+      color: c.color,
+      talles_con_stock: Object.fromEntries(
+        [...c.talles.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([t, suc]) => [t, [...suc].sort()])
+      ),
+      precio_lista_hasta_3_cuotas_sin_interes: c.lista,
+      precio_efectivo_o_transferencia_con_15_por_ciento_off: precioContado(c.lista),
+    }))
+
+    // Una foto representativa: la del color pedido (o de un color con stock)
+    // si Tienda Nube la tiene asociada; si no, la primera del producto.
+    const fotosDelModelo = g.modeloIds.flatMap((id) => fotosPorModelo.get(id)?.fotos ?? [])
+    const coloresDeInteres = colores.map((c) => c.claveColor)
+    const foto =
+      fotosDelModelo.find((f) => f.colores.some((c) => coloresDeInteres.some((ci) => ci.includes(c) || c.includes(ci)))) ??
+      fotosDelModelo[0]
+    if (foto) ctx.fotosPermitidas.add(foto.src)
+    const link = g.modeloIds.map((id) => fotosPorModelo.get(id)?.link).find(Boolean) ?? null
 
     return {
-      modelo_id: modelo.id,
-      nombre: modelo.descripcion,
-      categoria: modelo.categoria,
-      material: modelo.material,
+      modelo_id: g.modeloIds[0],
+      nombre: g.nombre,
+      categoria: g.categoria,
+      material: g.material,
       hay_stock_con_esos_filtros: colores.length > 0,
-      talles_con_stock_en_cualquier_color: [...tallesConStockTotal].sort(),
-      colores,
+      talles_con_stock_en_cualquier_color: [...g.tallesTotales].sort(),
+      colores: colores.map(({ claveColor, ...resto }) => {
+        void claveColor
+        return resto
+      }),
+      foto: foto?.src ?? null,
+      link_producto: link,
+      _puntaje: g.puntaje,
     }
   })
 
-  // Primero lo que sí tiene stock con los filtros pedidos.
-  resultados.sort((a, b) => Number(b.hay_stock_con_esos_filtros) - Number(a.hay_stock_con_esos_filtros))
-  return { total_coincidencias: resultados.length, modelos: resultados.slice(0, 6) }
+  // Primero lo que sí tiene stock con los filtros pedidos, después los que
+  // coinciden mejor con el nombre; a igualdad, alfabético (orden estable).
+  resultados.sort(
+    (a, b) =>
+      Number(b.hay_stock_con_esos_filtros) - Number(a.hay_stock_con_esos_filtros) ||
+      b._puntaje - a._puntaje ||
+      Number(Boolean(b.foto)) - Number(Boolean(a.foto)) ||
+      a.nombre.localeCompare(b.nombre)
+  )
+  const conStock = resultados.filter((r) => r.hay_stock_con_esos_filtros).length
+  return {
+    modelos_con_stock_con_esos_filtros: conStock,
+    modelos: resultados.slice(0, MAX_MODELOS_POR_BUSQUEDA).map(({ _puntaje, ...resto }) => {
+      void _puntaje
+      return resto
+    }),
+  }
 }
 
 async function obtenerFotosYLink(ctx: ContextoHerramientas, input: { modelo_id: string; color?: string }) {
@@ -271,7 +350,7 @@ async function ejecutarHerramienta(ctx: ContextoHerramientas, nombre: string, in
 const SYSTEM_BASE = `Sos la asistente virtual de Strawberry Trejo, una tienda de calzado femenino de Córdoba, Argentina. Atendés por mensaje directo de Instagram a clientas que consultan por productos y por la tienda.
 
 TONO
-Español rioplatense (voseo), cálido, natural y breve, como una vendedora del local. Mensajes de 1 a 4 oraciones. Algún emoji suave está bien, sin abusar. Nada de sonar a robot ni a catálogo.
+Español rioplatense (voseo), cálido, natural y breve, como una vendedora del local. Mensajes cortos (1 a 4 oraciones; las listas de modelos pueden ser más largas). Algún emoji suave está bien, sin abusar. Nada de sonar a robot ni a catálogo.
 
 QUÉ PODÉS RESPONDER
 1. Productos: precio, disponibilidad (stock, talles, colores), fotos y ayuda para elegir entre productos del catálogo.
@@ -284,14 +363,15 @@ REGLAS DE DATOS
 - Precio, stock, talles y colores salen SOLO de las herramientas, consultadas en esta conversación. Nunca de memoria ni de mensajes viejos del historial: el stock cambia.
 - Trabajamos talles del 35 al 40, pero eso no significa que haya: la disponibilidad de cada talle la dice SIEMPRE buscar_productos. Nunca afirmes que hay un talle sin haberlo consultado.
 - Si no encontrás el producto o la herramienta no da datos claros, derivá. No inventes características (material, altura de taco, etc.) que no estén en los datos.
-- Si hay muchos modelos que coinciden, nombrá como máximo 3 (los que tengan stock) y ofrecé ver más o pasar fotos. Mensajes cortos.
+- Si coinciden varios modelos, listá los que tengan stock con lo que pidió la clienta (hasta 12) en líneas cortas, una por modelo y separadas con saltos de línea (agrupá por tipo, ej. "Texanas:" y "Botas:", si ayuda): Nombre (colores): $precio de lista. Aclará una sola vez, al final, que pagando en efectivo o transferencia hay 15% de descuento. No repitas la sucursal en cada línea. Si buscar_productos informa más modelos con stock que los que listás, decí cuántos más hay y ofrecé verlos. Si la clienta pidió más de un tipo (ej. "botas o texanas"), incluí todos los tipos en el mismo mensaje, no ofrezcas "mostrarte los otros después". No dejes afuera modelos que cumplen lo pedido sin avisar.
 - Si la clienta describe un producto de forma ambigua y hay varios candidatos, preguntale cuál es.
 - Si no hay stock del talle o color pedido, decilo con claridad y ofrecé solo alternativas reales que muestren los datos.
 - Solo afirmes que algo "no hay" cuando identificaste con certeza el modelo. Si la clienta lo describe vagamente (ej. "la chocolate con hebilla") y no podés estar segura de cuál es, preguntale el nombre del modelo o mandale fotos de candidatos; no digas que no hay stock.
 - Podés decir en qué sucursal está disponible un talle. En los datos las sucursales figuran como "Trejo" (Obispo Trejo 468, Nueva Córdoba) y "Villa Allende" (Lisboa 22, complejo Cuadra 1). Una clienta que quiere ir a probarse puede pasar por esa sucursal.
 - El precio que siempre informás es el de lista (en hasta 3 cuotas sin interés). Agregá que pagando en efectivo o transferencia hay 15% de descuento y el monto que ya calcula la herramienta. Formato $72.000. No menciones precios mayoristas.
 - Usá los montos exactamente como los devuelve la herramienta; no hagas cuentas vos.
-- Fotos: usá obtener_fotos_y_link y poné en "fotos" solo URLs que esa herramienta te devolvió (máximo 3). Si la herramienta no devuelve fotos de ese modelo, no inventes ni mandes otra cosa: usá la acción "responder_y_derivar" con un mensaje tipo "Ahora no tengo la foto a mano, ya te la paso en un ratito 🙂" para que el equipo la envíe.
+- Fotos de los modelos que recomendás: cuando nombres modelos concretos, mandá una foto de cada uno. Copiá en "fotos" el campo "foto" que buscar_productos dio para cada modelo que nombrás, en el mismo orden (máximo 4; si nombrás más, las de los primeros). Si a algún modelo le falta la foto (foto null), simplemente no mandes foto de ese. Decí que pasás fotos solo de los modelos cuya foto realmente copiaste en "fotos" (nombralos).
+- Fotos pedidas: si la clienta pide ver fotos de un modelo, usá obtener_fotos_y_link (hasta 3 fotos de ese modelo). Poné en "fotos" solo URLs que una herramienta te devolvió. Si ahí no hay fotos del modelo que pidió, no inventes ni mandes otra cosa: usá la acción "responder_y_derivar" con un mensaje tipo "Ahora no tengo la foto a mano, ya te la paso en un ratito 🙂" para que el equipo la envíe.
 - Cómo comprar: la tienda online https://www.strawberrytrejo.com.ar (el link del producto lo da obtener_fotos_y_link) o pasando por un local. Usá solo links que salgan de los datos o de una herramienta.
 
 CONVERSACIÓN
@@ -392,7 +472,7 @@ export async function responderConsulta(
   for (let i = 0; i < MAX_ITERACIONES; i++) {
     const response = await client.messages.create({
       model: MODELO_IA,
-      max_tokens: 2000,
+      max_tokens: 8000,
       system: [
         { type: "text", text: SYSTEM_BASE, cache_control: { type: "ephemeral" } },
         { type: "text", text: contexto },
@@ -443,7 +523,7 @@ export async function responderConsulta(
       const mensaje = (parsed.mensaje ?? "").trim()
       // Solo se aceptan fotos que una herramienta devolvió en este mismo
       // turno — nunca una URL "escrita" por el modelo.
-      const fotos = (parsed.fotos ?? []).filter((f) => ctx.fotosPermitidas.has(f)).slice(0, 3)
+      const fotos = (parsed.fotos ?? []).filter((f) => ctx.fotosPermitidas.has(f)).slice(0, MAX_FOTOS)
       const conMensaje = accion === "responder" || accion === "responder_y_derivar"
       if (conMensaje && !mensaje) {
         resultado = derivar("respuesta_vacia")

@@ -54,8 +54,15 @@ interface TiendaNubeApiProduct {
   id: number
   name: Record<string, string>
   description: Record<string, string>
-  images: Array<{ src: string }>
+  canonical_url?: string
+  images: Array<{ id: number; src: string; position?: number }>
+  variants?: Array<{ values?: Array<Record<string, string>>; image_id?: number | null }>
   categories: Array<{ id: number; name: Record<string, string> }>
+}
+
+export interface FotoTiendaNube {
+  src: string
+  colores: string[] // colores (normalizados) cuyas variantes usan esta foto
 }
 
 export interface TiendaNubeProducto {
@@ -64,11 +71,31 @@ export interface TiendaNubeProducto {
   descripcion: string
   descripcionHtml: string
   imagenes: string[]
+  fotos: FotoTiendaNube[]
+  link: string | null
   categorias: string[]
 }
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+}
+
+function urlHttps(src: string): string {
+  return src.startsWith("//") ? `https:${src}` : src
+}
+
+function fotosConColores(p: TiendaNubeApiProduct): FotoTiendaNube[] {
+  const ordenadas = [...(p.images ?? [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  return ordenadas.map((img) => {
+    const colores = new Set<string>()
+    for (const v of p.variants ?? []) {
+      if (v.image_id !== img.id) continue
+      // El primer valor de la variante es el color (el segundo, el talle).
+      const color = Object.values(v.values?.[0] ?? {})[0]
+      if (color) colores.add(normalizarTexto(color.trim()))
+    }
+    return { src: urlHttps(img.src), colores: [...colores] }
+  })
 }
 
 function normalize(p: TiendaNubeApiProduct): TiendaNubeProducto {
@@ -78,6 +105,8 @@ function normalize(p: TiendaNubeApiProduct): TiendaNubeProducto {
     descripcionHtml: p.description?.es ?? Object.values(p.description ?? {})[0] ?? "",
     descripcion: stripHtml(p.description?.es ?? Object.values(p.description ?? {})[0] ?? ""),
     imagenes: (p.images ?? []).map((img) => img.src),
+    fotos: fotosConColores(p),
+    link: p.canonical_url ?? null,
     categorias: (p.categories ?? []).map((c) => c.name?.es ?? Object.values(c.name ?? {})[0] ?? ""),
   }
 }

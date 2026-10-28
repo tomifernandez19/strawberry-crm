@@ -234,6 +234,19 @@ export async function sincronizarCatalogo(db: Db): Promise<ResumenSync> {
     if (tienePendientes) productosConPendientes++
   }
 
+  // Copia de fotos y links de Tienda Nube para que la IA las use sin llamar
+  // a la API en cada mensaje.
+  const filasFotos = modelos.flatMap((m) => {
+    const producto = m.tiendanube_id ? productoPorTiendaNubeId.get(m.tiendanube_id) : undefined
+    return producto
+      ? [{ modelo_id: m.id, link: producto.link, fotos: producto.fotos as never, updated_at: new Date().toISOString() }]
+      : []
+  })
+  if (filasFotos.length > 0) {
+    const { error: fotosError } = await db.schema("atencion").from("fotos_producto").upsert(filasFotos)
+    if (fotosError) throw fotosError
+  }
+
   if (filasNuevas.length > 0) {
     const { error: insertError } = await db.schema("atencion").from("product_attributes").insert(filasNuevas)
     if (insertError) throw insertError
