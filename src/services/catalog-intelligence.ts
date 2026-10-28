@@ -51,6 +51,7 @@ const REGLAS: ReglaPalabraClave[] = [
   { atributo: "tipo_calzado", valor: "sandalia", patrones: [/\bsandalias?\b/] },
   { atributo: "tipo_calzado", valor: "zapatilla", patrones: [/\bzapatillas?\b/] },
   { atributo: "tipo_calzado", valor: "chata", patrones: [/\bchatas?\b/] },
+  { atributo: "tipo_calzado", valor: "zueco", patrones: [/\bzuecos?\b/] },
 
   { atributo: "estilo", valor: "texana", patrones: [/\btexanas?\b/] },
   { atributo: "estilo", valor: "chelsea", patrones: [/\bchelsea\b/] },
@@ -126,8 +127,31 @@ export interface ResumenSync {
   totalProductosTiendaNube: number
   sinVincularAlErp: number
   productosProcesados: number
+  atributosConfirmadosDesdeErp: number
   atributosConfirmadosPorPalabraClave: number
   productosConPendientes: number
+}
+
+// Datos estructurados que el ERP ya tiene cargados (modelos.categoria y
+// modelos.material) — más confiables que adivinar por texto, así que van
+// primero. "Calzado" es una categoría genérica sin información, y Cartera/
+// Cinto no son calzado: esas no aportan atributos.
+const ATRIBUTOS_POR_CATEGORIA_ERP: Record<string, Partial<Record<AtributoEsperado, string>>> = {
+  bota: { tipo_calzado: "bota" },
+  sandalia: { tipo_calzado: "sandalia" },
+  zapatilla: { tipo_calzado: "zapatilla" },
+  zueco: { tipo_calzado: "zueco" },
+  "zapato de vestir": { tipo_calzado: "zapato" },
+  borcego: { tipo_calzado: "bota", estilo: "borcego" },
+  texana: { tipo_calzado: "bota", estilo: "texana" },
+}
+
+function atributosDesdeErp(categoria: string | null, material: string | null) {
+  const atributos: Partial<Record<AtributoEsperado, string>> = {
+    ...(categoria ? ATRIBUTOS_POR_CATEGORIA_ERP[normalizar(categoria.trim())] : undefined),
+  }
+  if (material?.trim()) atributos.material = material.trim().toLowerCase()
+  return atributos
 }
 
 // Job de sincronización (manual o programado). Recorre el catálogo de
@@ -142,13 +166,15 @@ export interface ResumenSync {
 export async function sincronizarCatalogo(db: Db): Promise<ResumenSync> {
   const productos = await fetchAllProductos()
 
+  // Todos los modelos activos, no solo los vinculados a Tienda Nube: el ERP
+  // aporta categoría y material aunque el producto no esté online.
   const { data: modelos, error: modelosError } = await db
     .from("modelos")
-    .select("id, tiendanube_id")
-    .not("tiendanube_id", "is", null)
+    .select("id, tiendanube_id, categoria, material")
+    .eq("activo", true)
   if (modelosError) throw modelosError
 
-  const modeloIdPorTiendaNubeId = new Map(modelos.map((m) => [m.tiendanube_id as string, m.id]))
+  const productoPorTiendaNubeId = new Map(productos.map((p) => [p.tiendaNubeId, p]))
   const modeloIds = modelos.map((m) => m.id)
 
   const { data: atributosExistentes, error: atributosError } = await db
@@ -165,30 +191,42 @@ export async function sincronizarCatalogo(db: Db): Promise<ResumenSync> {
     confirmadosPorModelo.get(a.modelo_id)!.add(a.atributo)
   }
 
-  let sinVincularAlErp = 0
+  const idsTiendaNubeVinculados = new Set(modelos.map((m) => m.tiendanube_id).filter(Boolean))
+  const sinVincularAlErp = productos.filter((p) => !idsTiendaNubeVinculados.has(p.tiendaNubeId)).length
+
   let productosProcesados = 0
   let productosConPendientes = 0
+  let atributosConfirmadosDesdeErp = 0
+  let atributosConfirmadosPorPalabraClave = 0
   const filasNuevas: Database["atencion"]["Tables"]["product_attributes"]["Insert"][] = []
 
-  for (const producto of productos) {
-    const modeloId = modeloIdPorTiendaNubeId.get(producto.tiendaNubeId)
-    if (!modeloId) {
-      sinVincularAlErp++
-      continue
+  for (const modelo of modelos) {
+    const yaConfirmados = confirmadosPorModelo.get(modelo.id) ?? new Set<string>()
+    const producto = modelo.tiendanube_id ? productoPorTiendaNubeId.get(modelo.tiendanube_id) : undefined
+    if (producto) productosProcesados++
+
+    // 1) ERP: dato estructurado, tiene prioridad.
+    for (const [atributo, valor] of Object.entries(atributosDesdeErp(modelo.categoria, modelo.material))) {
+      if (yaConfirmados.has(atributo)) continue
+      filasNuevas.push({ modelo_id: modelo.id, atributo, valor, fuente: "erp" })
+      yaConfirmados.add(atributo)
+      atributosConfirmadosDesdeErp++
     }
 
-    productosProcesados++
-    const yaConfirmados = confirmadosPorModelo.get(modeloId) ?? new Set<string>()
-    const normalizado = normalizar(producto.descripcion)
+    // 2) Tienda Nube: texto explícito en nombre + descripción.
+    const normalizado = producto ? normalizar(`${producto.nombre} ${producto.descripcion}`) : ""
     let tienePendientes = false
 
     for (const atributo of ATRIBUTOS_ESPERADOS) {
       if (yaConfirmados.has(atributo)) continue
 
-      const regla = REGLAS.find((r) => r.atributo === atributo && r.patrones.some((p) => p.test(normalizado)))
+      const regla = normalizado
+        ? REGLAS.find((r) => r.atributo === atributo && r.patrones.some((p) => p.test(normalizado)))
+        : undefined
       if (regla) {
-        filasNuevas.push({ modelo_id: modeloId, atributo, valor: regla.valor, fuente: "tienda_nube" })
+        filasNuevas.push({ modelo_id: modelo.id, atributo, valor: regla.valor, fuente: "tienda_nube" })
         yaConfirmados.add(atributo)
+        atributosConfirmadosPorPalabraClave++
       } else {
         tienePendientes = true
       }
@@ -201,12 +239,11 @@ export async function sincronizarCatalogo(db: Db): Promise<ResumenSync> {
     if (insertError) throw insertError
   }
 
-  const atributosConfirmadosPorPalabraClave = filasNuevas.length
-
   return {
     totalProductosTiendaNube: productos.length,
     sinVincularAlErp,
     productosProcesados,
+    atributosConfirmadosDesdeErp,
     atributosConfirmadosPorPalabraClave,
     productosConPendientes,
   }

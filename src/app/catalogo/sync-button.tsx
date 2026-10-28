@@ -36,9 +36,9 @@ export default function SyncButton() {
       {resumen && (
         <p className={styles.syncSummary}>
           {resumen.totalProductosTiendaNube} productos en Tienda Nube · {resumen.productosProcesados}{" "}
-          vinculados al ERP · {resumen.sinVincularAlErp} sin vincular · {resumen.atributosConfirmadosPorPalabraClave}{" "}
-          atributos confirmados por palabra clave (sin gastar IA) · {resumen.productosConPendientes} productos
-          todavía con atributos pendientes
+          vinculados al ERP · {resumen.sinVincularAlErp} sin vincular · {resumen.atributosConfirmadosDesdeErp}{" "}
+          atributos tomados del ERP · {resumen.atributosConfirmadosPorPalabraClave} por texto de Tienda Nube (sin
+          gastar IA) · {resumen.productosConPendientes} productos todavía con atributos pendientes
         </p>
       )}
     </div>

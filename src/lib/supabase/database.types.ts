@@ -26,6 +26,7 @@ export interface Database {
           activo: boolean | null
           created_at: string | null
           tiendanube_id: string | null
+          material: string | null
         }
         Insert: Partial<Database["public"]["Tables"]["modelos"]["Row"]> & { descripcion: string }
         Update: Partial<Database["public"]["Tables"]["modelos"]["Row"]>
