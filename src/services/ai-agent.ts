@@ -431,7 +431,7 @@ REGLAS DE DATOS
 
 - Reservas: se puede reservar un producto con una seña a partir de $10.000 (está en los datos del negocio). Si la clienta pregunta si se puede reservar, confirmalo en una línea con ese monto. Si quiere avanzar con la reserva (o pregunta cómo pagar la seña o cuándo retirar), usá "responder_y_derivar" con un mensaje corto tipo "Dale! Te paso con el equipo para coordinar la reserva 🙌🏼". No gestiones nada más vos.
 - Horarios: las sucursales tienen horarios distintos a la tarde; si no dice cuál sucursal, informá los de las dos en una línea cada una.
-- Imágenes: si la clienta respondió a una historia nuestra o mandó una foto, mirá la imagen (si es un video, ves 3 cuadros y podés leer el texto que se escribió encima), identificá el producto (si trae el nombre escrito, usalo) y buscalo con buscar_productos (tipo de calzado, color, nombre). Si quedan varios candidatos parecidos, compará con ver_fotos_modelos (hasta 8 por vez) y elegí el que coincide. Después respondé lo que pregunta (stock del talle, precio, etc.) sobre ESE modelo y mencionalo por su nombre para que ella confirme. Respondé SOLO si identificaste el modelo con certeza (la foto coincide claramente con uno del catálogo, o el nombre está escrito en la imagen). Si el nombre escrito coincide con varias versiones del mismo modelo (por ejemplo, distinto material: "Toronto Ecocuero" y "Toronto Gza"), no derives: mostrá todas esas versiones con su stock y precio. Si dudás entre dos o más modelos, si el producto no se ve bien, si no está en el catálogo o si la imagen no se pudo ver, no adivines ni ofrezcas opciones: usá "derivar" con el motivo "No pude identificar el producto de la historia" (o "de la foto"); el equipo lo resuelve.
+- Imágenes: si la clienta respondió a una historia nuestra o mandó una foto, mirá la imagen (si es un video, ves 3 cuadros y podés leer el texto que se escribió encima), identificá el producto (si trae el nombre escrito, usalo) y buscalo con buscar_productos (tipo de calzado, color, nombre). Si quedan varios candidatos parecidos, compará con ver_fotos_modelos (hasta 8 por vez) y elegí el que coincide. Después respondé lo que pregunta (stock del talle, precio, etc.) sobre ESE modelo y mencionalo por su nombre para que ella confirme. NO le mandes foto del producto (ella ya lo tiene a la vista en su historia o en su foto): "fotos" va vacío, salvo que pida ver fotos. Respondé SOLO si identificaste el modelo con certeza (la foto coincide claramente con uno del catálogo, o el nombre está escrito en la imagen). Si el nombre escrito coincide con varias versiones del mismo modelo (por ejemplo, distinto material: "Toronto Ecocuero" y "Toronto Gza"), no derives: mostrá todas esas versiones con su stock y precio. Si dudás entre dos o más modelos, si el producto no se ve bien, si no está en el catálogo o si la imagen no se pudo ver, no adivines ni ofrezcas opciones: usá "derivar" con el motivo "No pude identificar el producto de la historia" (o "de la foto"); el equipo lo resuelve.
 
 - Foto de un modelo que NO vendemos: si la clienta mandó ella misma una foto (no es una historia nuestra) de un producto que no está en nuestro catálogo, o que no reconocés como nuestro, y pide algo así o parecido, no busques alternativas ni ofrezcas opciones. Usá "responder_y_derivar" con un mensaje corto tipo "Dejame averiguar qué tenemos parecido y te cuento 🙌🏼", y como motivo "La clienta mandó la foto de un modelo que no vendemos y quiere algo parecido". Si la foto sí es de un modelo nuestro, tratala como cualquier consulta de producto.
 CONVERSACIÓN
@@ -627,7 +627,7 @@ export async function responderConsulta(
     `Es su primer mensaje: ${params.esPrimerMensaje ? "sí" : "no"}` +
     conversacionAnterior
 
-  const client = new Anthropic()
+  const client = new Anthropic({ maxRetries: 4 })
   const ctx: ContextoHerramientas = { db, fotosPermitidas: new Set() }
   const fuentes: Array<{ herramienta: string; entrada: unknown }> = []
   let tokensEntrada = 0
@@ -689,7 +689,10 @@ export async function responderConsulta(
       const mensaje = (parsed.mensaje ?? "").trim()
       // Solo se aceptan fotos que una herramienta devolvió en este mismo
       // turno — nunca una URL "escrita" por el modelo.
-      const fotos = (parsed.fotos ?? []).filter((f) => ctx.fotosPermitidas.has(f)).slice(0, MAX_FOTOS)
+      let fotos = (parsed.fotos ?? []).filter((f) => ctx.fotosPermitidas.has(f)).slice(0, MAX_FOTOS)
+      // Si la clienta preguntó a partir de una imagen suya (historia o foto), ya
+      // sabe cómo es el producto: no se le devuelve la foto, salvo que la pida.
+      if (conImagen && !/\b(fotos?|imagen(es)?|ver|mostr\w*|pasa\w*)\b/i.test(conImagen.contenido ?? "")) fotos = []
       const conMensaje = accion === "responder" || accion === "responder_y_derivar"
       if (conMensaje && !mensaje) {
         resultado = derivar("respuesta_vacia")
