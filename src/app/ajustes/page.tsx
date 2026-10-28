@@ -1,12 +1,19 @@
 import { getCurrentProfile } from "@/lib/supabase/session"
 import { createServiceClient } from "@/lib/supabase/server"
+import { gastoDesdeUsd, gastoUltimosDiasUsd, getAjustesIa, medianocheArgentina } from "@/services/ai-agent"
 import { estadoTokenInstagram } from "@/services/instagram-token"
 import TokenForm from "./token-form"
 import styles from "./ajustes.module.css"
 
 export default async function AjustesPage() {
   const profile = await getCurrentProfile()
-  const { guardado, invalidoDesde, diasRestantes } = await estadoTokenInstagram(createServiceClient())
+  const db = createServiceClient()
+  const { guardado, invalidoDesde, diasRestantes } = await estadoTokenInstagram(db)
+  const [gastoHoy, gasto30d, ajustesIa] = await Promise.all([
+    gastoDesdeUsd(db, medianocheArgentina()),
+    gastoUltimosDiasUsd(db, 30),
+    getAjustesIa(db),
+  ])
 
   return (
     <div>
@@ -44,6 +51,15 @@ export default async function AjustesPage() {
             <li>Copiá el token completo y pegalo acá.</li>
           </ol>
         </details>
+      </section>
+
+      <section className={styles.card} style={{ marginTop: 16 }}>
+        <h2>Gasto de IA (Anthropic)</h2>
+        <p className={styles.neutro}>
+          Hoy: <strong>US$ {gastoHoy.toFixed(3)}</strong> · Últimos 30 días: <strong>US$ {gasto30d.toFixed(2)}</strong> ·
+          Tope diario: US$ {ajustesIa.topeDiarioUsd.toFixed(2)} (modo: {ajustesIa.modo}). Es una estimación por tokens: el
+          número oficial está en console.anthropic.com → Usage.
+        </p>
       </section>
     </div>
   )

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/server"
+import { getAjustesIa, gastoHoyUsd } from "@/services/ai-agent"
 import { aprenderDeConversaciones } from "@/services/aprendizaje"
 
 export const maxDuration = 300
@@ -11,6 +12,11 @@ async function manejar(request: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
   const db = createServiceClient()
+
+  // Aprender es lo primero que se posterga si se alcanzó el tope diario de gasto.
+  if ((await gastoHoyUsd(db)) >= (await getAjustesIa(db)).topeDiarioUsd) {
+    return NextResponse.json({ omitido: "tope_diario_alcanzado" })
+  }
 
   const { data: marca } = await db.schema("atencion").from("ajustes").select("valor").eq("clave", "aprendizaje_hasta").maybeSingle()
   const desde = typeof marca?.valor === "string" ? marca.valor : new Date(Date.now() - 2 * 86_400_000).toISOString()

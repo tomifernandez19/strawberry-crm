@@ -267,6 +267,7 @@ export interface Database {
             | "clasificacion_intencion"
             | "propuesta_atributo"
             | "recomendacion_producto"
+            | "aprendizaje"
           conversation_message_id: string | null
           modelo_id: string | null
           intencion_clasificada: string | null

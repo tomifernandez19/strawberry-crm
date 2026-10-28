@@ -283,5 +283,16 @@ export async function aprenderDeConversaciones(db: Db, conversationIds: string[]
     }
   }
   resumen.conAportes = conAporte.size
+
+  // Queda registrado en ai_runs: cuenta para el tope diario y para el contador de gasto.
+  if (resumen.tokensIn > 0) {
+    await db.schema("atencion").from("ai_runs").insert({
+      tipo: "aprendizaje",
+      intencion_clasificada: `${resumen.guardados} guardados de ${resumen.conversacionesRevisadas} conversaciones`,
+      modelo_ia: MODELO_IA,
+      tokens_entrada: resumen.tokensIn,
+      tokens_salida: resumen.tokensOut,
+    })
+  }
   return resumen
 }

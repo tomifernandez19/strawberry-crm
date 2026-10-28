@@ -44,23 +44,37 @@ export async function getAjustesIa(db: Db): Promise<{ modo: ModoIa; topeDiarioUs
   }
 }
 
-export async function gastoHoyUsd(db: Db): Promise<number> {
-  // "Hoy" = desde la medianoche de Argentina (UTC-3, sin horario de verano).
-  const ahora = new Date()
-  const medianoche = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate(), 3))
-  if (medianoche > ahora) medianoche.setUTCDate(medianoche.getUTCDate() - 1)
-
+// Gasto estimado (USD) de todo lo que registra ai_runs desde una fecha: respuestas
+// a clientas y aprendizaje. Estimación por tokens; el número oficial es el de la
+// consola de Anthropic.
+export async function gastoDesdeUsd(db: Db, desde: Date): Promise<number> {
   const { data } = await db
     .schema("atencion")
     .from("ai_runs")
     .select("tokens_entrada, tokens_salida")
-    .gte("created_at", medianoche.toISOString())
+    .gte("created_at", desde.toISOString())
   return (data ?? []).reduce(
     (total, r) =>
       total +
       ((r.tokens_entrada ?? 0) * USD_POR_MILLON_ENTRADA + (r.tokens_salida ?? 0) * USD_POR_MILLON_SALIDA) / 1_000_000,
     0
   )
+}
+
+export function medianocheArgentina(): Date {
+  // "Hoy" = desde la medianoche de Argentina (UTC-3, sin horario de verano).
+  const ahora = new Date()
+  const medianoche = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate(), 3))
+  if (medianoche > ahora) medianoche.setUTCDate(medianoche.getUTCDate() - 1)
+  return medianoche
+}
+
+export async function gastoUltimosDiasUsd(db: Db, dias: number): Promise<number> {
+  return gastoDesdeUsd(db, new Date(Date.now() - dias * 86_400_000))
+}
+
+export async function gastoHoyUsd(db: Db): Promise<number> {
+  return gastoDesdeUsd(db, medianocheArgentina())
 }
 
 function normalizar(texto: string): string {
