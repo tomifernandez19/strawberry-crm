@@ -103,3 +103,13 @@
   color: #8b7a7e;
   font-size: 0.82rem;
 }
+
+.filtroStock {
+  margin: 12px 0;
+  font-size: 0.88rem;
+  color: #5e4f53;
+}
+
+.filtroStock a {
+  color: #8c2b4a;
+}
