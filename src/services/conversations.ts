@@ -155,7 +155,7 @@ export async function setConversationEstado(
 
 export async function listConversations(
   db: Db,
-  filter?: { estado?: Conversation["estado"] }
+  filter?: { estado?: Conversation["estado"]; ultimosDias?: number; excluirCerradas?: boolean; limite?: number }
 ): Promise<Conversation[]> {
   let query = db
     .schema("atencion")
@@ -164,6 +164,11 @@ export async function listConversations(
     .order("ultima_interaccion_at", { ascending: false })
 
   if (filter?.estado) query = query.eq("estado", filter.estado)
+  if (filter?.excluirCerradas) query = query.neq("estado", "cerrada")
+  if (filter?.ultimosDias) {
+    query = query.gte("ultima_interaccion_at", new Date(Date.now() - filter.ultimosDias * 86_400_000).toISOString())
+  }
+  if (filter?.limite) query = query.limit(filter.limite)
 
   const { data, error } = await query
   if (error) throw error
@@ -180,4 +185,21 @@ export async function listMessages(db: Db, conversationId: string): Promise<Conv
 
   if (error) throw error
   return data
+}
+
+// Cierra las conversaciones sin actividad hace más de `dias` días (incluso si
+// quedaron marcadas para el equipo: si pasó una semana, el caso ya se resolvió
+// por otro lado o no se va a resolver). No borra nada: siguen en la pestaña
+// "Todas", y si la clienta vuelve a escribir se abre una conversación nueva.
+export async function cerrarInactivas(db: Db, dias = 7): Promise<number> {
+  const limite = new Date(Date.now() - dias * 86_400_000).toISOString()
+  const { data, error } = await db
+    .schema("atencion")
+    .from("conversations")
+    .update({ estado: "cerrada", cerrada_at: new Date().toISOString(), motivo_atencion: null })
+    .neq("estado", "cerrada")
+    .lt("ultima_interaccion_at", limite)
+    .select("id")
+  if (error) throw error
+  return data.length
 }

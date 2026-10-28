@@ -18,16 +18,27 @@ const ESTADO_LABEL: Record<string, string> = {
   cerrada: "Cerrada",
 }
 
-export default async function BandejaPage() {
+const VISTAS = [
+  { id: "atender", label: "Para atender" },
+  { id: "recientes", label: "Recientes (7 días)" },
+  { id: "todas", label: "Todas" },
+] as const
+
+export default async function BandejaPage({ searchParams }: { searchParams: Promise<{ vista?: string }> }) {
+  const { vista: vistaParam } = await searchParams
+  const vista = VISTAS.find((v) => v.id === vistaParam)?.id ?? "atender"
+
   const db = createServiceClient()
-  const todas = await listConversations(db)
-  // Lo que espera al equipo va arriba; dentro de cada grupo, lo más reciente primero.
   const REQUIERE_ATENCION = new Set(["intervencion_humana", "requiere_aprobacion"])
-  const conversations = [
-    ...todas.filter((c) => REQUIERE_ATENCION.has(c.estado)),
-    ...todas.filter((c) => !REQUIERE_ATENCION.has(c.estado)),
-  ]
-  const pendientes = todas.filter((c) => REQUIERE_ATENCION.has(c.estado)).length
+
+  const atender = (await listConversations(db)).filter((c) => REQUIERE_ATENCION.has(c.estado))
+  const conversations =
+    vista === "atender"
+      ? atender
+      : vista === "recientes"
+        ? await listConversations(db, { ultimosDias: 7, excluirCerradas: true })
+        : await listConversations(db, { limite: 300 })
+  const pendientes = atender.length
 
   const customerIds = [...new Set(conversations.map((c) => c.customer_id))]
   const { data: customers } = await db
@@ -40,16 +51,23 @@ export default async function BandejaPage() {
   return (
     <div>
       <h1>Conversaciones</h1>
-      {pendientes > 0 && (
-        <p className={styles.resumenAtencion}>
-          {pendientes === 1 ? "1 conversación espera al equipo" : `${pendientes} conversaciones esperan al equipo`}
-        </p>
-      )}
+      <div className={styles.vistas}>
+        {VISTAS.map((v) => (
+          <Link
+            key={v.id}
+            href={`/bandeja?vista=${v.id}`}
+            prefetch={false}
+            className={v.id === vista ? `${styles.vista} ${styles.vistaActiva}` : styles.vista}
+          >
+            {v.label}
+            {v.id === "atender" && pendientes > 0 ? ` (${pendientes})` : ""}
+          </Link>
+        ))}
+      </div>
 
       {conversations.length === 0 ? (
         <div className={styles.emptyState}>
-          Todavía no hay conversaciones. Van a empezar a aparecer acá apenas se conecte el primer canal
-          (Fase 12), o podés cargar una de prueba directo en Supabase mientras tanto.
+          {vista === "atender" ? "No hay nada esperando al equipo. 🎉" : "No hay conversaciones para mostrar."}
         </div>
       ) : (
         <table className={styles.table}>

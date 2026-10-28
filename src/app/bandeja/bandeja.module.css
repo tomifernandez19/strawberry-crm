@@ -373,3 +373,26 @@
 .anteriores a {
   color: #8c2b4a;
 }
+
+.vistas {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.vista {
+  padding: 6px 14px;
+  border: 1px solid #e2d5d3;
+  border-radius: 99px;
+  background: #fff;
+  color: #5e4f53;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.vistaActiva {
+  background: #8c2b4a;
+  border-color: #8c2b4a;
+  color: #fff;
+}
