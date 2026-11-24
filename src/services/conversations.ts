@@ -140,9 +140,11 @@ export async function setConversationEstado(
     const { data: customer } = await db
       .schema("atencion")
       .from("customers")
-      .select("nombre")
+      .select("nombre, instagram_psid")
       .eq("id", data.customer_id)
       .maybeSingle()
+    // Las pruebas automáticas usan clientas "test-…": no deben sonar en el celular del equipo.
+    if (customer?.instagram_psid?.startsWith("test-")) return data
     await avisarEquipo(db, {
       conversationId: conversationId,
       titulo: estado === "requiere_aprobacion" ? "Borrador listo para aprobar" : "Una clienta espera al equipo",
