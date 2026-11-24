@@ -349,6 +349,38 @@ export interface Database {
         Update: Partial<Database["atencion"]["Tables"]["respuestas_programadas"]["Row"]>
         Relationships: []
       }
+      ejemplos: {
+        Row: {
+          id: string
+          conversation_id: string
+          pregunta: string
+          respuesta: string
+          inicio_respuesta_id: string
+          enviado_at: string
+          created_at: string
+        }
+        Insert: Partial<Database["atencion"]["Tables"]["ejemplos"]["Row"]> & {
+          conversation_id: string
+          pregunta: string
+          respuesta: string
+          inicio_respuesta_id: string
+          enviado_at: string
+        }
+        Update: Partial<Database["atencion"]["Tables"]["ejemplos"]["Row"]>
+        Relationships: []
+      }
+      avisos: {
+        Row: {
+          id: string
+          texto: string
+          hasta: string | null
+          activo: boolean
+          created_at: string
+        }
+        Insert: Partial<Database["atencion"]["Tables"]["avisos"]["Row"]> & { texto: string }
+        Update: Partial<Database["atencion"]["Tables"]["avisos"]["Row"]>
+        Relationships: []
+      }
       conocimiento: {
         Row: {
           id: string

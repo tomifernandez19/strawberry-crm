@@ -92,3 +92,45 @@
     padding: 13px;
   }
 }
+
+.listaAvisos {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.listaAvisos li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #fbf0df;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.listaAvisos em {
+  color: #8b7a7e;
+  font-style: normal;
+}
+
+.listaAvisos button {
+  flex-shrink: 0;
+  border: 1px solid #e2d5d3;
+  background: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.form input[type="date"] {
+  padding: 8px 10px;
+  border: 1px solid #e2d5d3;
+  border-radius: 8px;
+  max-width: 200px;
+}

@@ -123,8 +123,11 @@ const MOTIVOS_SISTEMA: Record<string, string> = {
   respuesta_cortada: "La IA no pudo armar una respuesta a tiempo",
   sin_respuesta_del_modelo: "La IA no pudo armar una respuesta",
   sin_mensaje_pendiente: "No hay un mensaje de la clienta para responder",
+  identificacion_visual_insegura: "No pude identificar con seguridad el producto de la imagen (solo se parece a otros): confirmá el modelo antes de dar precio",
 }
 const motivoLegible = (motivo: string) => MOTIVOS_SISTEMA[motivo] ?? (motivo || "Derivada por la IA")
+
+const ESPERA_ANTES_DE_RESPONDER_MS = 20_000
 
 // Camino con Claude (Fase 10). "sombra": deja un borrador en la bandeja para
 // que una persona lo apruebe, no manda nada solo. "auto": programa el envío
@@ -145,6 +148,28 @@ async function procesarConIa(
   // Ya está marcada para una persona y nadie la atendió todavía: la IA no
   // se mete ni gasta.
   if (conversation.estado === "intervencion_humana") return
+
+  // Esperar a que la clienta termine de escribir: muchas mandan "Hola" y después la
+  // consulta, o la consulta en 3 mensajes. Si llega otro mensaje suyo mientras tanto,
+  // ese se encarga de todo junto; y si el equipo ya contestó, no hay nada que hacer.
+  await new Promise((r) => setTimeout(r, ESPERA_ANTES_DE_RESPONDER_MS))
+  const { data: este } = await db
+    .schema("atencion")
+    .from("conversation_messages")
+    .select("created_at")
+    .eq("id", params.mensajeId)
+    .maybeSingle()
+  if (este) {
+    const { data: posterior } = await db
+      .schema("atencion")
+      .from("conversation_messages")
+      .select("id")
+      .eq("conversation_id", conversation.id)
+      .in("emisor", ["cliente", "humano"])
+      .gt("created_at", este.created_at)
+      .limit(1)
+    if (posterior && posterior.length > 0) return
+  }
 
   let resultado
   try {
@@ -267,6 +292,14 @@ export async function procesarEcoSaliente(db: Db, eco: EchoMessage): Promise<voi
     canal_message_id: eco.canalMessageId,
     enviado_at: eco.timestamp,
   })
+
+  // Si había un borrador esperando, ya quedó respondido a mano: se cierra.
+  await db
+    .schema("atencion")
+    .from("borradores_ia")
+    .update({ estado: "descartado", resuelto_at: new Date().toISOString() })
+    .eq("conversation_id", conversation.id)
+    .eq("estado", "pendiente")
 
   await setConversationEstado(db, conversation.id, "ia_respondiendo")
 }

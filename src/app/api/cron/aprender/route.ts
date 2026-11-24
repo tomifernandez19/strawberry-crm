@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/server"
 import { getAjustesIa, gastoHoyUsd } from "@/services/ai-agent"
 import { aprenderDeConversaciones } from "@/services/aprendizaje"
+import { indexarEjemplos } from "@/services/ejemplos"
 
 export const maxDuration = 300
 
@@ -30,12 +31,15 @@ async function manejar(request: Request) {
     .lte("ultima_interaccion_at", hasta)
     .limit(80)
 
-  const resumen = await aprenderDeConversaciones(db, (conversaciones ?? []).map((c) => c.id))
+  const ids = (conversaciones ?? []).map((c) => c.id)
+  const resumen = await aprenderDeConversaciones(db, ids)
+  // Sin costo de IA: suma a la biblioteca los intercambios reales nuevos (pregunta -> respuesta del equipo).
+  const ejemplosNuevos = await indexarEjemplos(db, ids)
   // Solo se avanza la marca si se procesó todo el tramo (si hubo más de 80, queda para mañana).
   if ((conversaciones?.length ?? 0) < 80) {
     await db.schema("atencion").from("ajustes").upsert({ clave: "aprendizaje_hasta", valor: hasta as never, updated_at: new Date().toISOString() })
   }
-  return NextResponse.json(resumen)
+  return NextResponse.json({ ...resumen, ejemplosNuevos })
 }
 
 export const GET = manejar

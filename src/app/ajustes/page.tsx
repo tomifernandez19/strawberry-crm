@@ -1,7 +1,8 @@
 import { getCurrentProfile } from "@/lib/supabase/session"
 import { createServiceClient } from "@/lib/supabase/server"
-import { gastoDesdeUsd, gastoUltimosDiasUsd, getAjustesIa, medianocheArgentina } from "@/services/ai-agent"
+import { gastoDesdeUsd, gastoUltimosDiasUsd, getAjustesIa, hoyArgentina, medianocheArgentina } from "@/services/ai-agent"
 import { estadoTokenInstagram } from "@/services/instagram-token"
+import AvisosForm from "./avisos-form"
 import TokenForm from "./token-form"
 import styles from "./ajustes.module.css"
 
@@ -9,6 +10,8 @@ export default async function AjustesPage() {
   const profile = await getCurrentProfile()
   const db = createServiceClient()
   const { guardado, invalidoDesde, diasRestantes } = await estadoTokenInstagram(db)
+  const { data: avisosTodos } = await db.schema("atencion").from("avisos").select("id, texto, hasta").eq("activo", true).order("created_at", { ascending: false })
+  const avisos = (avisosTodos ?? []).filter((a) => !a.hasta || a.hasta >= hoyArgentina())
   const [gastoHoy, gasto30d, ajustesIa] = await Promise.all([
     gastoDesdeUsd(db, medianocheArgentina()),
     gastoUltimosDiasUsd(db, 30),
@@ -18,6 +21,16 @@ export default async function AjustesPage() {
   return (
     <div>
       <h1>Ajustes</h1>
+
+      <section className={styles.card} style={{ marginBottom: 16 }}>
+        <h2>Avisos para clientas (promos y horarios especiales)</h2>
+        <p className={styles.neutro}>
+          Lo que cargues acá lo usa la IA en sus respuestas, por encima de los datos fijos: promos del momento
+          (&quot;Cyberweek&quot;), descuentos distintos al habitual, horarios especiales o feriados. Poné la fecha en que
+          vence y el aviso se apaga solo. Si algo cambió y no está acá, la IA responde con los datos de siempre.
+        </p>
+        <AvisosForm avisos={avisos} />
+      </section>
 
       <section className={styles.card}>
         <h2>Conexión con Instagram</h2>

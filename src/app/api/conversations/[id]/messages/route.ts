@@ -45,6 +45,14 @@ export async function POST(request: Request, ctx: RouteContext<"/api/conversatio
     canal_message_id: canalMessageId,
   })
 
+  // Un borrador pendiente ya no hace falta: la respondió una persona.
+  await db
+    .schema("atencion")
+    .from("borradores_ia")
+    .update({ estado: "descartado", resuelto_at: new Date().toISOString(), resuelto_por: profile.id })
+    .eq("conversation_id", id)
+    .eq("estado", "pendiente")
+
   // La conversación vuelve a manos de la IA salvo que ya esté cerrada —
   // responder manualmente no implica automáticamente tomar control permanente.
   await db
